@@ -70,6 +70,8 @@ data class SettingsFile(
     val frigate: FrigateServer? = null,
     // The apps visible in the row, in their order
     val appTiles: List<NamedEntity> = emptyList(),
+    // Every setting in the schema, by key: so a file restores the launcher's behaviour too, not just its connections
+    val preferences: Map<String, Any?> = emptyMap(),
 ) {
     /** Only what's checked, by [Row] key */
     fun only(keys: Set<String>) = copy(
@@ -81,11 +83,12 @@ data class SettingsFile(
         topBar = topBar?.filter { "action:$it" in keys },
         frigate = frigate?.takeIf { FRIGATE_KEY in keys },
         appTiles = appTiles.takeIf { APP_TILES_KEY in keys }.orEmpty(),
+        preferences = preferences.takeIf { PREFERENCES_KEY in keys }.orEmpty(),
     )
 
     fun toJson(): String = JSONObject()
         .put("format", FILE_FORMAT)
-        .put("version", 1)
+        .put("version", 3)
         .put("cameras", JSONArray(camerasToJson(cameras)))
         .apply {
             login?.let {
@@ -108,12 +111,29 @@ data class SettingsFile(
             }
         }
         .put("appTiles", entitiesToJson(appTiles))
+        .apply {
+            if (preferences.isNotEmpty()) {
+                put(
+                    "preferences",
+                    JSONObject().apply {
+                        preferences.forEach { (key, value) ->
+                            when (value) {
+                                is Boolean, is Int -> put(key, value)
+                                is Number -> put(key, value.toInt())
+                                is String -> put(key, value)
+                            }
+                        }
+                    },
+                )
+            }
+        }
         .toString(2)
 }
 
 private const val LOGIN_KEY = "login"
 private const val FRIGATE_KEY = "frigate"
 private const val APP_TILES_KEY = "appTiles"
+private const val PREFERENCES_KEY = "preferences"
 
 private fun entitiesToJson(entities: List<NamedEntity>) =
     JSONArray(entities.map { JSONObject().put("id", it.id).put("name", it.name) })
@@ -126,6 +146,9 @@ private fun entitiesFromJson(array: JSONArray?) = List(array?.length() ?: 0) { i
 fun settingsFromJson(json: String): SettingsFile? = runCatching {
     val root = JSONObject(json)
     if (root.optString("format") != FILE_FORMAT) return null
+    // Version 1 was the first file; 2 added nothing this reader needs; 3 adds "preferences".
+    // Anything newer is refused rather than half-read.
+    if (root.optInt("version", 1) !in 1..3) return null
     val login = root.optJSONObject("homeAssistantLogin")
     val frigate = root.optJSONObject("frigate")
     SettingsFile(
@@ -138,6 +161,15 @@ fun settingsFromJson(json: String): SettingsFile? = runCatching {
         topBar = root.optJSONArray("topBar")?.let { array -> List(array.length()) { array.getString(it) } },
         frigate = frigate?.let { FrigateServer(it.getString("url"), it.optString("username"), it.optString("password"), it.optString("certPin")) },
         appTiles = entitiesFromJson(root.optJSONArray("appTiles")),
+        preferences = root.optJSONObject("preferences")?.let { object_ ->
+            object_.keys().asSequence().associateWith { key ->
+                when (val value = object_.get(key)) {
+                    is Boolean, is Int -> value
+                    is Number -> value.toInt()
+                    else -> value.toString()
+                }
+            }
+        }.orEmpty(),
     )
 }.getOrNull()
 
@@ -175,6 +207,13 @@ private fun sections(file: SettingsFile) = listOf(
     Section("Home Assistant sensors", file.sensors.map { Row("sensor:${it.id}", it.name, it.id) }),
     Section("Home Assistant actions", file.actions.map { Row("action:${it.id}", it.name, it.id) }),
     Section("Frigate login", listOfNotNull(file.frigate?.let { Row(FRIGATE_KEY, Uri.parse(it.url).host ?: it.url, it.username) })),
+    // One line: settings are restored as a set
+    Section(
+        "Settings",
+        listOfNotNull(
+            file.preferences.takeIf { it.isNotEmpty() }?.let { Row(PREFERENCES_KEY, "${it.size} settings", "Toggles, numbers and behaviour") },
+        ),
+    ),
     // One line: the order only means something as a whole
     Section(
         "App tiles",
@@ -284,6 +323,8 @@ private fun ExportToFile(file: SettingsFile, onDone: () -> Unit, onBack: () -> U
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var chosen by remember { mutableStateOf<SettingsFile?>(null) }
+    // The launcher's own folder browser, behind the picker and the app folder
+    var browsing by remember { mutableStateOf(false) }
 
     ChecklistDialog(
         title = "Export settings",
@@ -304,6 +345,15 @@ private fun ExportToFile(file: SettingsFile, onDone: () -> Unit, onBack: () -> U
     )
     // On top of the list, which keeps its checkmarks for coming back to
     chosen?.let { settings ->
+        if (!browsing) {
+            exportSettings(
+                file = settings,
+                onBrowseFiles = { browsing = true },
+                onDismiss = { chosen = null },
+                onSaved = onDone,
+            )
+            return@let
+        }
         FileBrowser(
             title = "Save settings as",
             defaultName = "homeboard-settings-${SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.ROOT).format(Date())}.json",
@@ -332,6 +382,7 @@ fun ImportDialog(onImport: (SettingsFile) -> Unit, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var opened by remember { mutableStateOf<SettingsFile?>(null) }
     var fromFile by remember { mutableStateOf(false) }
+    var browsing by remember { mutableStateOf(false) }
 
     val settings = opened
     if (settings != null) {
@@ -347,6 +398,13 @@ fun ImportDialog(onImport: (SettingsFile) -> Unit, onDismiss: () -> Unit) {
         )
     } else if (!fromFile) {
         ImportFromTv(onImport = onImport, onOpenFile = { fromFile = true }, onDismiss = onDismiss)
+    } else if (!browsing) {
+        importSettings(
+            onImport = { opened = it },
+            onBrowseFiles = { browsing = true },
+            // Back from here returns to the way in, not out of importing
+            onDismiss = { fromFile = false },
+        )
     } else {
         FileBrowser(
             title = "Import settings",

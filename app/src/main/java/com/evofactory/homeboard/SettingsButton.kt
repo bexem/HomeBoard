@@ -32,47 +32,20 @@ val SettingsButtonSize = 40.dp
 /** Cog at the right of the top bar; opens the launcher's settings menu */
 @Composable
 fun SettingsButton(
-    showHidden: Boolean,
-    hiddenCount: Int,
-    onShowHiddenChange: (Boolean) -> Unit,
-    onOpenCameras: () -> Unit,
-    onOpenHomeAssistant: () -> Unit,
-    onOpenFrigate: () -> Unit,
-    onOpenLauncherSettings: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    var menuOpen by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         IconButton(
-            onClick = { menuOpen = true },
+            onClick = onOpenSettings,
             modifier = Modifier.size(SettingsButtonSize).onFocusChanged { focused = it.isFocused },
             colors = IconButtonDefaults.colors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
         ) {
             Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = "Settings")
         }
         if (focused) TopBarButtonLabel("Settings")
-        if (menuOpen) {
-            ContextMenu(
-                // The cog says what it is
-                title = null,
-                actions = listOf(
-                    // The system Settings app has no tile in the row, so it's reachable from here
-                    MenuAction(if (context.isGoogleTv()) "Google TV settings" else "Android TV settings") {
-                        context.openSystemSettings()
-                    },
-                    MenuAction("HomeBoard settings", onOpenLauncherSettings),
-                    MenuAction("Cameras", onOpenCameras),
-                    MenuAction("Home Assistant", onOpenHomeAssistant),
-                    MenuAction("Frigate", onOpenFrigate),
-                    showHiddenAction(showHidden, hiddenCount) { onShowHiddenChange(!showHidden) },
-                ),
-                onDismiss = { menuOpen = false },
-                placement = MenuPlacement.BelowAtRightMargin,
-            )
-        }
     }
 }
 

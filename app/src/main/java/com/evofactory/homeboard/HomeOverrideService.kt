@@ -6,15 +6,21 @@ import android.app.ActivityOptions
 import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
+import android.database.ContentObserver
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 
 private const val TAG = "HomeOverride"
 
@@ -169,4 +175,61 @@ fun Context.isHomeOverrideServiceOn(): Boolean {
         ?: return false
     val service = ComponentName(this, HomeOverrideService::class.java)
     return enabled.split(':').any { ComponentName.unflattenFromString(it) == service }
+}
+
+/**
+ * The helper's three states, as the settings menu reports them. "Enabled but not running" is the one
+ * worth naming: Android removes an accessibility grant when the app is force-stopped — the app can see
+ * the grant is gone from the secure setting, and only the user can turn it back on (D8).
+ */
+enum class HomeOverrideState {
+    /** Not enabled in the TV's Accessibility settings */
+    Off,
+
+    /** Enabled there, but Android isn't running it (dropped after a force-stop, or still binding) */
+    EnabledNotRunning,
+
+    /** Bound and running */
+    Running,
+}
+
+/** Whether this app is the TV's current home app, in which case the helper is redundant */
+fun Context.isDefaultHomeApp(): Boolean {
+    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+    val resolved = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+    return resolved?.activityInfo?.packageName == packageName
+}
+
+/** The helper's state right now: the secure setting for the grant, and whether Android is running it */
+fun Context.homeOverrideState(): HomeOverrideState = when {
+    !isHomeOverrideServiceOn() -> HomeOverrideState.Off
+    HomeOverrideService.running -> HomeOverrideState.Running
+    else -> HomeOverrideState.EnabledNotRunning
+}
+
+/**
+ * The helper's state, following changes: the secure setting (ContentObserver) and the service's own
+ * connected flag (a Compose state, so binding and unbinding recompose).
+ */
+@Composable
+fun rememberHomeOverrideState(): HomeOverrideState {
+    val context = LocalContext.current
+    var grant by remember { mutableStateOf(context.isHomeOverrideServiceOn()) }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                grant = context.isHomeOverrideServiceOn()
+            }
+        }
+        val setting = Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        context.contentResolver.registerContentObserver(setting, false, observer)
+        grant = context.isHomeOverrideServiceOn()
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+    val running = HomeOverrideService.running
+    return when {
+        !grant -> HomeOverrideState.Off
+        running -> HomeOverrideState.Running
+        else -> HomeOverrideState.EnabledNotRunning
+    }
 }

@@ -1,6 +1,7 @@
 package com.evofactory.homeboard
 
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity() {
     private var haDisplay by mutableStateOf(HaDisplay())
     private var frigate by mutableStateOf(FrigateServer())
     private var frigateOpen by mutableStateOf(false)
-    private var launcherSettingsOpen by mutableStateOf(false)
+    private var settingsOpen by mutableStateOf(false)
     private var stuckPlayersOpen by mutableStateOf(false)
     private var replaceHome by mutableStateOf(false)
     private var catchHomeKey by mutableStateOf(false)
@@ -299,7 +300,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 HomeHelperWarning(
                                     replaceHome,
-                                    onClick = { launcherSettingsOpen = true },
+                                    onClick = { settingsOpen = true },
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                                 if (haServer.isSet) HaActionButtons(haConnection, actions)
@@ -310,13 +311,7 @@ class MainActivity : ComponentActivity() {
                             },
                         ) {
                             SettingsButton(
-                                showHidden = showHidden,
-                                hiddenCount = hiddenApps?.size ?: 0,
-                                onShowHiddenChange = { showHidden = it },
-                                onOpenCameras = { camerasOpen = true },
-                                onOpenHomeAssistant = { haDialogOpen = true },
-                                onOpenFrigate = { frigateOpen = true },
-                                onOpenLauncherSettings = { launcherSettingsOpen = true },
+                                onOpenSettings = { settingsOpen = true },
                                 modifier = Modifier.focusRequester(cogFocus),
                             )
                         }
@@ -602,27 +597,32 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { frigateOpen = false },
                         )
                     }
-                    if (launcherSettingsOpen) {
-                        LauncherSettingsDialog(
-                            catchHomeKey = catchHomeKey,
-                            reopenAfterHome = reopenAfterHome,
-                            autoTurnedOff = remember { prefs.replaceHomeAutoOff },
-                            onCatchHomeKeyChange = { on ->
-                                prefs.catchHomeKey = on
+                    if (settingsOpen) {
+                        SettingsMenuDialog(
+                            actions = SettingsActions(
+                                openCameras = { camerasOpen = true },
+                                openHomeAssistant = { haDialogOpen = true },
+                                openFrigate = { frigateOpen = true },
+                                openPing = { pingOpen = true },
+                                openAccessibilitySettings = {
+                                    openAccessibilitySettings()
+                                },
+                                openSystemSettings = { openSystemSettings() },
+                                exportSettings = { exportOpen = true },
+                                importSettings = { importOpen = true },
+                                restartApp = { restartApp() },
+                            ),
+                            onSettingsChanged = {
+                                // The launcher keeps its own copies of the few settings it renders
+                                catchHomeKey = prefs.catchHomeKey
+                                reopenAfterHome = prefs.reopenAfterHome
+                                replaceHome = prefs.replaceHome
+                                showFreeMemory = prefs.showFreeMemory
+                                cameraGridLive = prefs.cameraGridLive
+                                minimizeVideoStreams = prefs.minimizeVideoStreams
                                 homeOverrideChanged()
                             },
-                            onReopenAfterHomeChange = { on ->
-                                prefs.reopenAfterHome = on
-                                homeOverrideChanged()
-                            },
-                            showFreeMemory = showFreeMemory,
-                            onShowFreeMemoryChange = { on ->
-                                prefs.showFreeMemory = on
-                                showFreeMemory = on
-                            },
-                            onExport = { exportOpen = true },
-                            onImport = { importOpen = true },
-                            onDismiss = { launcherSettingsOpen = false },
+                            onDismiss = { settingsOpen = false },
                         )
                     }
                     if (stuckPlayersOpen) {
@@ -640,6 +640,7 @@ class MainActivity : ComponentActivity() {
                                 topBar = haTopBar,
                                 frigate = frigate.takeIf { it.isSet },
                                 appTiles = visible.orEmpty().map { NamedEntity(it.key, it.label) },
+                                preferences = currentPreferences(prefs),
                             ),
                             onDismiss = { exportOpen = false },
                         )
@@ -676,12 +677,28 @@ class MainActivity : ComponentActivity() {
         prefs.haRefreshToken = ""
     }
 
+    /** Accessibility settings, or the TV's main settings screen on a TV that answers that one with a placeholder */
+    private fun openAccessibilitySettings() {
+        openSystemSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+    }
+
     private fun revokeHaLogin(server: HaServer) {
         lifecycleScope.launch { haRevoke(server) }
     }
 
     /** Adds what's in the file. A camera whose name is already taken gets "(imported)" after its name. */
     private fun applyImport(file: SettingsFile) {
+        if (file.preferences.isNotEmpty()) {
+            applyPreferences(prefs, file.preferences)
+            // The launcher renders a few of these itself
+            catchHomeKey = prefs.catchHomeKey
+            reopenAfterHome = prefs.reopenAfterHome
+            replaceHome = prefs.replaceHome
+            showFreeMemory = prefs.showFreeMemory
+            cameraGridLive = prefs.cameraGridLive
+            minimizeVideoStreams = prefs.minimizeVideoStreams
+            homeOverrideChanged()
+        }
         // The same camera, by its exact addresses, only takes the imported name. Each camera here
         // matches one in the file; any more copies in the file aren't added.
         val sameUrls = { a: Camera, b: Camera -> a.url == b.url && a.substreamUrl == b.substreamUrl }
