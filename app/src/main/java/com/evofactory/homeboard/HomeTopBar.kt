@@ -73,6 +73,9 @@ fun HomeTopBar(
     newEvents: Int = 0,
     // OK on the badge: the alerts it counts are behind this
     onNewEvents: () -> Unit = {},
+    // The count comes from notifications and every one it counts is ongoing: grey, like the other
+    // buttons, because nothing there is news
+    newEventsCalm: Boolean = false,
     // A dot on the Alerts tab while there are alerts nobody has looked at
     alertsDot: Boolean = false,
     // The tabs to show: Alerts can be hidden, and has no meaning without a Frigate server
@@ -112,7 +115,7 @@ fun HomeTopBar(
         }
         settings()
         Clock()
-        if (newEvents > 0) NewEventsBadge(newEvents, onNewEvents)
+        if (newEvents > 0) NewEventsBadge(newEvents, newEventsCalm, onNewEvents)
     }
 }
 
@@ -124,19 +127,30 @@ fun HomeTopBar(
  * of the system launcher that no other app may start), so the badge leads to the alerts it counts.
  */
 @Composable
-private fun NewEventsBadge(count: Int, onClick: () -> Unit) {
+private fun NewEventsBadge(count: Int, calm: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = Modifier.padding(start = 10.dp).fillMaxHeight(),
         shape = ClickableSurfaceDefaults.shape(CircleShape),
         // Stays its size when the remote is on it, so the bar doesn't shift
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0xFFC62828),
-            contentColor = Color.White,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color(0xFFC62828),
-        ),
+        // Red says something arrived; grey says these are only the services' own, the same grey as
+        // the buttons beside it, because nothing there is news
+        colors = if (calm) {
+            ClickableSurfaceDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+                focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            )
+        } else {
+            ClickableSurfaceDefaults.colors(
+                containerColor = Color(0xFFC62828),
+                contentColor = Color.White,
+                focusedContainerColor = Color.White,
+                focusedContentColor = Color(0xFFC62828),
+            )
+        },
     ) {
         Box(Modifier.fillMaxHeight().padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
             Text(

@@ -1904,3 +1904,27 @@ duplicating a toggle.
 - With one posted test notification: badge shows 1; the panel lists that row alone (no Ongoing
   group); Clear all removes it, the button goes, and the empty line reads once.
 - Restored to "Everything the TV shows" (his setting).
+
+## The count is grey when it counts no news (2026-11-13)
+
+Ema: "When showing all notifications and there are no dismissable notifications, colour the badge the
+same grey as the other buttons, otherwise you use what you have now."
+
+Red says something arrived for you; grey says the count is only the services' own ongoing
+notifications, which nobody can dismiss and which are not news. The badge takes its colours from the
+round buttons beside it (`surfaceVariant` disc, `onSurfaceVariant` number, `onSurface` when focused)
+in that case, and keeps its red otherwise.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeTopBar.kt` | `newEventsCalm` through to `NewEventsBadge`: two colour sets, one shape and size |
+| `MainActivity.kt` | The flag: the source is the TV's notifications **and** every entry is ongoing |
+
+### Verified on the Shield (2026-11-13, 19:50)
+
+Pixel-sampled: with the six ongoing notifications the badge disc is `#2B2A2F` — the same grey as the
+moon and Ethernet buttons (their discs sample `#2B2A2F`, their icons `#9A979D`, the badge's number
+the same). With one posted dismissible notification it turns `#C62828` again, and back to grey when
+that one is cleared.

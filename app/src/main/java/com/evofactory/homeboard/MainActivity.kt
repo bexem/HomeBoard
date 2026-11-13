@@ -537,6 +537,11 @@ class MainActivity : ComponentActivity() {
                                 frigate.isSet && alertsTab -> newEvents
                                 else -> 0
                             },
+                            // Every notification it counts is one the TV will not let anyone dismiss:
+                            // the count is the services' own, so it is not news
+                            newEventsCalm = badgeSource == BADGE_SOURCE_NOTIFICATIONS &&
+                                Notifications.entries.isNotEmpty() &&
+                                Notifications.entries.none { it.clearable },
                             // The dot is Frigate's, and stands down while the badge already counts Frigate
                             alertsDot = alertsDot && !frigateCounted && frigate.isSet && alertsTab && newEvents > 0,
                             onNewEvents = {
