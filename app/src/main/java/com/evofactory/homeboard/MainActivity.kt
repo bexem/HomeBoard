@@ -208,6 +208,8 @@ class MainActivity : ComponentActivity() {
     private var homeCameraStart by mutableStateOf(HOME_CAMERA_LAST)
     private var alertsTab by mutableStateOf(true)
     private var cameraSide by mutableStateOf(CAMERA_SIDE_LEFT)
+    private var cameraWidgetsSide by mutableStateOf(CAMERA_WIDGETS_RIGHT)
+    private var cameraGap by mutableStateOf(CAMERA_GAP_BETWEEN)
     private var haCameras by mutableStateOf(emptyList<HaCamera>())
     private var calendarConfig by mutableStateOf(CalendarConfig())
 
@@ -228,6 +230,8 @@ class MainActivity : ComponentActivity() {
         homeCameraStart = prefs.homeCameraStart
         alertsTab = prefs.alertsTab
         cameraSide = prefs.cameraSide
+        cameraWidgetsSide = prefs.cameraWidgetsSide
+        cameraGap = prefs.cameraGap
         haCameras = haCamerasFromPrefs(prefs.haCameraEntities)
         cameraGridLive = prefs.cameraGridLive
         minimizeVideoStreams = prefs.minimizeVideoStreams
@@ -714,59 +718,90 @@ class MainActivity : ComponentActivity() {
                                                 else -> CameraBox(cameraWidth)
                                             }
                                         }
-                                        // "Leave the gap" is the space *between* the picture and the panel,
-                                        // whichever side each is on: it must never end up on the outside,
-                                        // pushing the widgets off the screen's edge
-                                        val gapSlot: @Composable () -> Unit = {
-                                            if (sideContent && cameraSide == CAMERA_SIDE_LEFT) Spacer(Modifier.weight(1f))
-                                        }
-                                        if (!panelFirst) cameraSlot()
-                                        if (!panelFirst) gapSlot()
-                                        if (sideContent && haDisplay.homeDashboard != null) {
-                                            // A dashboard chosen for the Home tab: its sections, card by card
-                                            HaAssistantTab(
-                                                connection = haConnection,
-                                                homeAssistantSet = haServer.isSet,
-                                                entityIds = homeEntities,
-                                                dashboard = haDisplay.homeDashboard,
-                                                // The button next to the cog
-                                                tabFocus = networkFocus,
-                                                onSetUp = { haDialogTab = HaDialogTab.Home },
-                                                inset = 0.dp,
-                                                modifier = Modifier
-                                                    .then(if (gapKept) Modifier.width(panelWidth) else Modifier.weight(1f))
-                                                    .fillMaxHeight()
-                                                    .focusRequester(haSensorsFocus),
-                                            )
-                                        } else if (sideContent) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .then(if (gapKept) Modifier.width(panelWidth) else Modifier.weight(1f))
-                                                    .fillMaxHeight(),
-                                            ) {
-                                                HomeAssistantPanel(
+                                        // Which side the widgets are on: the setting, swapped each
+                                        // session when the shuffle asks for it
+                                        val widgetsLeft = (cameraWidgetsSide == CAMERA_WIDGETS_LEFT) != panelFirst
+                                        // The gap a narrow picture leaves is either kept between the two
+                                        // (the pair then spans the row) or split to the sides (the pair
+                                        // sits together in the middle). "The rest of the width" has no gap
+                                        // to place: the panel takes everything the camera leaves.
+                                        val panelSlot: @Composable () -> Unit = {
+                                            if (sideContent && haDisplay.homeDashboard != null) {
+                                                // A dashboard chosen for the Home tab: its sections, card by card
+                                                HaAssistantTab(
                                                     connection = haConnection,
+                                                    homeAssistantSet = haServer.isSet,
                                                     entityIds = homeEntities,
-                                                    calendar = calendarConfig,
-                                                    showSensors = homeSensors,
-                                                    cardSeed = shuffleSeed,
-                                                    shuffleCards = shuffleCards,
-                                                    sensorsFocus = haSensorsFocus,
+                                                    dashboard = haDisplay.homeDashboard,
                                                     // The button next to the cog
-                                                    upFocus = networkFocus,
-                                                    onLogIn = { haDialogTab = HaDialogTab.Home },
-                                                    onOpen = {
-                                                        tab = HomeTab.Assistant
-                                                        runCatching { assistantTabFocus.requestFocus() }
-                                                    },
-                                                    modifier = Modifier.fillMaxSize(),
+                                                    tabFocus = networkFocus,
+                                                    onSetUp = { haDialogTab = HaDialogTab.Home },
+                                                    inset = 0.dp,
+                                                    modifier = Modifier
+                                                        .then(if (gapKept) Modifier.width(panelWidth) else Modifier.weight(1f))
+                                                        .fillMaxHeight()
+                                                        .focusRequester(haSensorsFocus),
                                                 )
+                                            } else if (sideContent) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .then(if (gapKept) Modifier.width(panelWidth) else Modifier.weight(1f))
+                                                        .fillMaxHeight(),
+                                                ) {
+                                                    HomeAssistantPanel(
+                                                        connection = haConnection,
+                                                        entityIds = homeEntities,
+                                                        calendar = calendarConfig,
+                                                        showSensors = homeSensors,
+                                                        cardSeed = shuffleSeed,
+                                                        shuffleCards = shuffleCards,
+                                                        sensorsFocus = haSensorsFocus,
+                                                        // The button next to the cog
+                                                        upFocus = networkFocus,
+                                                        onLogIn = { haDialogTab = HaDialogTab.Home },
+                                                        onOpen = {
+                                                            tab = HomeTab.Assistant
+                                                            runCatching { assistantTabFocus.requestFocus() }
+                                                        },
+                                                        modifier = Modifier.fillMaxSize(),
+                                                    )
+                                                }
                                             }
                                         }
-                                        if (panelFirst) {
-                                            gapSlot()
-                                            cameraSlot()
+                                        when {
+                                            // No gap to place: the panel takes the rest of the row
+                                            !gapKept -> if (widgetsLeft) {
+                                                panelSlot()
+                                                cameraSlot()
+                                            } else {
+                                                cameraSlot()
+                                                panelSlot()
+                                            }
+                                            // The pair together in the middle, its slack split to the sides
+                                            cameraGap == CAMERA_GAP_SIDES -> {
+                                                Spacer(Modifier.weight(1f))
+                                                if (widgetsLeft) {
+                                                    panelSlot()
+                                                    cameraSlot()
+                                                } else {
+                                                    cameraSlot()
+                                                    panelSlot()
+                                                }
+                                                Spacer(Modifier.weight(1f))
+                                            }
+                                            // The pair across the row, its slack between them
+                                            widgetsLeft -> {
+                                                panelSlot()
+                                                Spacer(Modifier.weight(1f))
+                                                cameraSlot()
+                                            }
+                                            else -> {
+                                                cameraSlot()
+                                                Spacer(Modifier.weight(1f))
+                                                panelSlot()
+                                            }
                                         }
+
                                     }
                                 }
                             }
@@ -1213,6 +1248,10 @@ class MainActivity : ComponentActivity() {
                                 shuffleSides = prefs.shuffleSides
                                 cameraSource = prefs.cameraSource
                                 cameraSide = prefs.cameraSide
+            cameraWidgetsSide = prefs.cameraWidgetsSide
+            cameraGap = prefs.cameraGap
+                                cameraWidgetsSide = prefs.cameraWidgetsSide
+                                cameraGap = prefs.cameraGap
                                 // Where Home starts is a selection, not a value the row can leave alone
                                 applyHomeCameraStart()
                                 channelKeys = prefs.channelKeys

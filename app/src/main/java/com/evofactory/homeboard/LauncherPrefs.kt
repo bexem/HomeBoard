@@ -262,6 +262,18 @@ class LauncherPrefs(context: Context) {
         set(value) = prefs.edit { putBoolean("continue_watching", value) }
 
     /** Left on the first app goes to the last, and right off the last goes to the first */
+    /** Which side the widgets are on: [CAMERA_WIDGETS_RIGHT] (default) or [CAMERA_WIDGETS_LEFT] */
+    var cameraWidgetsSide: String
+        get() = prefs.getString("camera_widgets_side", CAMERA_WIDGETS_RIGHT)
+            ?.takeIf { it in setOf(CAMERA_WIDGETS_RIGHT, CAMERA_WIDGETS_LEFT) } ?: CAMERA_WIDGETS_RIGHT
+        set(value) = prefs.edit { putString("camera_widgets_side", value) }
+
+    /** Where the space a narrow picture leaves goes: [CAMERA_GAP_BETWEEN] (default) or [CAMERA_GAP_SIDES] */
+    var cameraGap: String
+        get() = prefs.getString("camera_gap", CAMERA_GAP_BETWEEN)
+            ?.takeIf { it in setOf(CAMERA_GAP_BETWEEN, CAMERA_GAP_SIDES) } ?: CAMERA_GAP_BETWEEN
+        set(value) = prefs.edit { putString("camera_gap", value) }
+
     /** The strip of Frigate events on the Cameras tab; off gives the grid its room */
     var camerasAlertsRow: Boolean
         get() = prefs.getBoolean("cameras_alerts_row", true)
@@ -592,6 +604,10 @@ val CALENDAR_REFRESH = 5..120
 const val CAMERA_SIDE_LEFT = "left"
 const val CAMERA_SIDE_CENTRE = "centre"
 const val CAMERA_SIDE_WIDER = "wider"
+const val CAMERA_WIDGETS_RIGHT = "right"
+const val CAMERA_WIDGETS_LEFT = "left"
+const val CAMERA_GAP_BETWEEN = "between"
+const val CAMERA_GAP_SIDES = "sides"
 const val CAMERA_SIDE_TWO_FIFTHS = "twofifths"
 const val CAMERA_SIDE_HALF = "half"
 

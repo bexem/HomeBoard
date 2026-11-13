@@ -1675,3 +1675,34 @@ and the slack is always placed **between** the picture and the panel (`gapSlot`)
 - **Two fifths**: camera 16:9 at the left, panel right at 392 dp of the 912 dp row (0.43), the gap between them (screenshot). *Half* is the same path at 0.5. Restored to **Leave the gap**, the value found.
 - **The measurement trap**: three screenshots in a row showed the previous value because a host-side prefs write was being raced by Android's automatic restart of the home app (the M12 pattern). The order that works — write, then force-stop, then start — is what produced the final captures.
 - Also fixed on the way: `TopDialog`'s title and subtitle are one line each with an ellipsis and a weight, so a long title can no longer wrap into the buttons (the overflow he pointed at); if the artefact he photographed was something else, it is the next thing to press.
+
+## Which side the widgets are on, and where the space goes (2026-11-13)
+
+From Ema's two screenshots: with the default width the pair spans the row and leaves **one big gap in the
+middle**; with a wider panel the pair sat **flush left with an empty right side**, which reads as odd. And
+there was no way to put the widgets on the left.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | `camera_widgets_side` (`right` default, `left`) and `camera_gap` (`between` default, `sides`) — two new keys, both additive |
+| `SettingsSchema.kt` | Two rows in *Camera beside the cards*: **Widgets are on the** (The right / The left) and **The gap goes** (Between the two / On the sides) |
+| `MainActivity.kt` | The side row now composes from three explicit cases: the panel takes the rest of the width; or the pair is together in the middle with its slack **split to both sides**; or the pair spans the row with its slack **between** them. Which side the widgets sit on is the setting, XOR the per-session shuffle swap, so both still compose |
+
+### Deliberate designs worth keeping
+
+- **The pair is never left hanging.** Every case either fills the row or centres the pair with equal outer
+  margins; the only difference is *where* the slack goes, which is now a choice instead of a consequence.
+- **Two switches, not one list.** Side and gap are independent: any width works with either side and either
+  gap, and the shuffle's per-session swap still flips the setting rather than overruling it.
+
+### Verified on the Shield (2026-11-13, 16:27–16:29)
+
+- **The gap goes: On the sides**, default width: camera 202–900, panel 939–1364, margins 202 left and 204
+  right — the pair centred, the middle gap 39 px (screenshot).
+- **On the sides + two fifths**: camera 96–792, panel 831–1470, margins 96 and 98, the panel visibly wider
+  (screenshot). This is the shape his second screenshot was reaching for.
+- **Widgets are on the: The left** (gap between): the calendar at the left edge, the camera at the right
+  edge, the slack between them — the mirror of his first screenshot (screenshot).
+- Restored: `camera_side=left`, `camera_gap=between`, `camera_widgets_side=right`.
