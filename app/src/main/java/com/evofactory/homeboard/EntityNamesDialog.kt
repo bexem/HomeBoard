@@ -114,7 +114,7 @@ fun EntityNamesDialog(
                             maxLines = 1,
                         )
                     },
-                    modifier = rows.row(id).focusable()
+                    modifier = rows.row(id).ringToTop().focusable()
                         .then(if (id == entities.firstOrNull()) Modifier.focusRequester(first) else Modifier),
                 )
             }

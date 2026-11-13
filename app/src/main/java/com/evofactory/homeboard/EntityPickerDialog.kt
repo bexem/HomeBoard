@@ -115,9 +115,9 @@ fun EntityPickerDialog(
                             ),
                         )
                     },
-                    modifier = focus.row(row.id).onPreviewKeyEvent { event ->
-                        // Left and right move a chosen row; anything else is the list's own. Where order
-                        // means nothing they are left to the list, so focus still leaves sideways
+                    // Left and right move a chosen row; anything else is the list's own. Where order
+                    // means nothing they are left to the ring, so focus still leaves sideways
+                    modifier = focus.row(row.id).ringToTop().onPreviewKeyEvent { event ->
                         if (!isChosen || !movesMatter || event.type != KeyEventType.KeyDown) {
                             false
                         } else {

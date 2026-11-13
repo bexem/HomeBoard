@@ -1742,3 +1742,25 @@ clip players, and the settings page is a full-screen page). What he saw:
 - Network status (the subtitle branch): three buttons + X flush right, title and subtitle one line
   each.
 - `assembleDebug` green; tree committed clean.
+
+## Every dialog row reaches the X (2026-11-13)
+
+The audit's three dead ends: the entity picker, the entity names and the calendar colours dialogs drew
+their rows without `ringToTop()`, so Left and Right from a row did nothing — the remote could not reach
+the X or the Done button from the list, unlike every other dialog.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `EntityPickerDialog.kt` | Rows get `.ringToTop()`; a chosen row in a dialog where order matters still consumes Left/Right to move itself first |
+| `EntityNamesDialog.kt` | Rows get `.ringToTop()` |
+| `CalendarColoursDialog.kt` | Rows get `.ringToTop()` |
+
+### Verified on the Shield (2026-11-13, 17:45–18:05)
+
+- Entity picker (Launcher → Screensaver → Cameras it shows): Left from the Doorbell row lands on the X.
+- Calendar colours (Calendar → Event colours): Left from the first row lands on the X; Right then OK
+  closes the dialog through Done (the a11y dump after Right still shows the row — the bridge reports a
+  stale node; the OK outcome is the proof).
+- Names on screen (Assistant → Top bar and order): Left from the first row lands on the X.

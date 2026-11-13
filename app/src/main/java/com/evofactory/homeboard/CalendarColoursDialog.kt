@@ -92,7 +92,7 @@ fun CalendarColoursDialog(
                         )
                     },
                     // A door: the colour itself is chosen in the launcher's one colour picker
-                    modifier = rows.row(id),
+                    modifier = rows.row(id).ringToTop(),
                 )
             }
         }
