@@ -288,7 +288,7 @@ val AllSettings: List<SettingDef> = listOf(
         SettingSection.Home,
         "Shuffle",
         "Shuffle the camera",
-        "The Home tab shows a different camera each session, instead of the one the remote last switched to",
+        "The Home tab shows a different camera each session; the channel keys or a number button keep the one you pick until the TV's next session",
         LauncherPrefs::shuffleCamera,
     ),
     toggle(
@@ -597,6 +597,8 @@ val AllSettings: List<SettingDef> = listOf(
         "The first in the list, or the one the remote last switched to",
         LauncherPrefs::homeCameraStart,
         listOf(HOME_CAMERA_FIRST to "First in the list", HOME_CAMERA_LAST to "Last switched to"),
+        // While the shuffle owns the camera this row would change nothing
+        showIf = { !it.shuffleCamera },
     ),
     list(
         "ha_camera_entities",
@@ -612,7 +614,7 @@ val AllSettings: List<SettingDef> = listOf(
         SettingSection.Cameras,
         "Keys and sound",
         "Channel keys switch cameras",
-        "Channel up and down go to the next or previous camera; off leaves them to the TV",
+        "Channel up and down go to the next or previous camera on the Home and Cameras tabs; elsewhere they are left to the TV",
         LauncherPrefs::channelKeys,
     ),
     choice(

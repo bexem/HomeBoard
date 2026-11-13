@@ -77,6 +77,8 @@ class MainActivity : ComponentActivity() {
     private var cameraGridLive by mutableStateOf(true)
     private var minimizeVideoStreams by mutableStateOf(false)
     private var selectedCamera by mutableStateOf("")
+    // A camera picked with the remote outranks the shuffle, for the rest of the session
+    private var cameraChosenManually by mutableStateOf(false)
     private var tab by mutableStateOf(HomeTab.Home)
     // Which tab of the Home Assistant dialog is open; null when it is closed
     private var haDialogTab by mutableStateOf<HaDialogTab?>(null)
@@ -297,10 +299,13 @@ class MainActivity : ComponentActivity() {
                     val sessionCams = remember(cams, shuffleSeed, shuffleCamera) {
                         Shuffle.order(cams, shuffleSeed, shuffleCamera, salt = 1)
                     }
-                    val camera = if (shuffleCamera) sessionCams.firstOrNull()?.takeIf { cams.size > 1 }
-                        ?: cams.find { it.id == selectedCamera }
-                        ?: cams.firstOrNull()
-                    else cams.find { it.id == selectedCamera } ?: cams.firstOrNull()
+                    // The shuffled pick is the session's default; choosing one with the remote ends it
+                    val shuffled = if (shuffleCamera && !cameraChosenManually) {
+                        sessionCams.firstOrNull()?.takeIf { cams.size > 1 }
+                    } else {
+                        null
+                    }
+                    val camera = shuffled ?: cams.find { it.id == selectedCamera } ?: cams.firstOrNull()
                     val mainCameraFocus = remember { FocusRequester() }
                     val haSensorsFocus = remember { FocusRequester() }
                     val networkFocus = remember { FocusRequester() }
@@ -1133,7 +1138,10 @@ class MainActivity : ComponentActivity() {
                                 hidePhoneApps = prefs.hidePhoneApps
                                 homeSensors = prefs.homeSensors
                                 // The session's own seed is rolled already; these say how to use it
-                                shuffleCamera = prefs.shuffleCamera
+                                // Switched on again, the shuffle gets the camera back for this session
+                                if (prefs.shuffleCamera && !shuffleCamera) cameraChosenManually = false
+                                if (prefs.shuffleCamera && !shuffleCamera) cameraChosenManually = false
+            shuffleCamera = prefs.shuffleCamera
                                 shuffleActions = prefs.shuffleActions
                                 shuffleCards = prefs.shuffleCards
                                 shuffleSides = prefs.shuffleSides
@@ -1337,6 +1345,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectCamera(camera: Camera) {
+        // From here the session shows what was asked for, not what the shuffle rolled
+        cameraChosenManually = true
         selectedCamera = camera.id
         prefs.selectedCamera = camera.id
     }

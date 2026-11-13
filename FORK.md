@@ -1237,3 +1237,39 @@ W1, W2, W5, W6, W7, W8 (W7 decided by Ema: the keys act on an off light **and** 
 - W5 was not seen during an outage: the line is moved above the sensors-card gate in the composition
   (verified by reading the change and by the page building without it), but no outage was created on the
   live TV to watch it appear.
+
+## F3 — a camera picked with the remote beats the shuffle, for the session (2026-11-13)
+
+H3 and W3, decided by Ema. With "Shuffle the camera" on, the Home tab always drew `sessionCams.first()`, so
+the channel keys and the number buttons called `selectCamera` and the display ignored them — and "Camera on
+Home" was equally dead. Both features are ledger-deliberate (M2's keys, M7.2's shuffle); the fix makes them
+compose instead of one silently winning.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `MainActivity.kt` | `cameraChosenManually`: `selectCamera()` sets it, the display uses the shuffled pick only while it is false (`if (shuffleCamera && !cameraChosenManually)`), and it is reset when the shuffle is switched back on — in `onSettingsChanged` **and** `applyImport`, comparing before the assignment |
+| `SettingsSchema.kt` | "Camera on Home" hides while the shuffle owns the camera (`showIf = { !it.shuffleCamera }`); "Shuffle the camera" says a pick sticks until the TV's next session; "Channel keys switch cameras" says where the keys act (Home and Cameras tabs; elsewhere left to the TV) |
+| `LauncherPrefs.kt` | The `homeCameraStart` doc comment said "always switch at once, whichever this is" — corrected to what the keys do |
+
+### Deliberate designs worth keeping
+
+- **The shuffle is the session's default, not its absolute.** One manual pick ends it until the process
+  restarts; the seed is only rolled at start, so "rest of the session" is exact.
+- **Re-enabling the shuffle hands the camera back**, which is what makes the switch mean something after a
+  manual pick — and it is the only reset, so a pick is never forgotten mid-evening.
+- **A row that cannot change anything is hidden**, not left to be guessed at (M10's precedent).
+
+### Verified on the Shield (2026-11-13, 11:25–11:32)
+
+- Shuffle on (`shuffle_camera=true`, set from the page, live per F2): Home showed the session's camera (the
+  doorbell).
+- **Number key 2**: `Player … started over TCP, …, /garden` and the Home picture became the Garden — with
+  the shuffle still on. Before this the press wrote `camera_selected` and the display kept the shuffled
+  camera. (Ema has `channel_keys=false`, so the number keys are the ungated manual path; they call the same
+  `selectCamera`.)
+- "Camera beside the cards" then held **only** "Space beside the camera": "Camera on Home" was hidden while
+  the shuffle was on, and came back with it off (screenshots).
+- Shuffle off: `camera_selected` still held the camera picked by hand and Home drew it; Ema's own selection
+  was then restored with number key 3 (Front).

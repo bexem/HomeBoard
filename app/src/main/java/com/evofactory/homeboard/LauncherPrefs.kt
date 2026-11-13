@@ -262,7 +262,7 @@ class LauncherPrefs(context: Context) {
     /**
      * Which camera the Home tab shows when the launcher starts: [HOME_CAMERA_FIRST] (the first in the
      * list, so the order in the camera dialog decides) or [HOME_CAMERA_LAST] (whichever the remote last
-     * switched to). Channel up and down always switch at once, whichever this is.
+     * switched to). Channel up and down step to the next or previous camera on this setting's own list.
      */
     var homeCameraStart: String
         get() = prefs.getString("home_camera_start", HOME_CAMERA_LAST).takeIf { it in HOME_CAMERA_STARTS } ?: HOME_CAMERA_LAST
