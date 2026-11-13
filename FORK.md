@@ -880,3 +880,44 @@ same dialog twice, over two palette definitions of the same shape.
 - Picking **Charcoal** closed the dialog and wrote `background_colour=-14935265` (`0xFF1C1B1F`);
   reopening showed **In use** on Charcoal. Picking **Teal** wrote `-15848918` (`0xFF0E2A2A`).
 - Puts back: **Black** (`-16777216`), the value Ema had.
+
+## C4 — one picker, one interaction model (2026-11-13)
+
+Audit findings #2 and #8, plus W9/F11. Three pickers (calendars, Home Assistant cameras, favourite apps)
+were the same dialog three times, and only the calendar's OK said what it did.
+
+### New files
+
+| File | What it is |
+|---|---|
+| `EntityPickerDialog.kt` | `PickerRow(id, label, detail)` and one picker: the list in the caller's order, a tick per chosen row, `positionLabel` on a chosen row ("Priority 3 of 2"), and OK opening the menu — `includeLabel`, `excludeLabel`, `Move up (…)` / `Move down (…)`. Left and right still move a chosen row. The subtitle is computed: 0 needs the caller's `emptyText`, 1 reads **"One <noun>. OK chooses more."**, more uses the caller's own sentence |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `CalendarPickerDialog.kt` | 177 → 65 lines: its Home Assistant read, its priority wording and its writes, around the shared picker |
+| `HaCamerasDialog.kt` | 160 → 71: the same, and it **gains the move menu** — it used to toggle on OK with no way to reorder except discovery of left/right |
+| `FavouritesEditorDialog.kt` | 121 → 50: pinned-first ordering kept, `Pin it` / `Unpin it` as the menu's verbs |
+
+### Deliberate designs worth keeping
+
+- **OK says what it does, everywhere.** Only the calendar picker had the Include / Leave out / Move menu
+  (M12). All three have it now, so no picker hides its only action behind a key nobody was told about.
+- **The rows never move under the remote.** Each picker renders the caller's order — the server's
+  alphabetical order for calendars and cameras, pinned-then-the-rest for apps — and a move rewrites the
+  stored order instead. Verified: moving Birthdays up one left it in the same place in the list, with
+  "Priority 9 of 10" instead of "10 of 10"; moving it back restored the stored list byte for byte.
+- **The subtitle cannot promise what the list cannot do** (F11): one chosen row reads "One camera. OK
+  chooses more.", with the reorder sentence only for two or more.
+
+### Verified on the Shield (2026-11-13, 10:0x–10:2x)
+
+- **Calendars**: "10 calendars, highest priority first", rows alphabetical, chosen ones numbered. OK on
+  Birthdays offered *Move up (Priority 9)* / *Leave it out*; the move applied with the row still in
+  place, and moving it back returned `calendar_entities` to Ema's order exactly.
+- **Home Assistant cameras**: the menu now offers *Move down (Position 2)* / *Leave it out* on a chosen
+  camera and *Include it* on the rest. Leaving Doorbell out made the subtitle read **"One camera. OK
+  chooses more."**; including it again and moving it up restored `ha_camera_entities` exactly.
+- **Favourite apps**: pinned first with "Position 1 of 4", OK offered *Move down (Position 2)* / *Unpin
+  it*; right moved Plezy to slot 2 and left put it back, `favourite_apps` byte-identical to the start.
