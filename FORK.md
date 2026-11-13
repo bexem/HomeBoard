@@ -1273,3 +1273,43 @@ compose instead of one silently winning.
   the shuffle was on, and came back with it off (screenshots).
 - Shuffle off: `camera_selected` still held the camera picked by hand and Home drew it; Ema's own selection
   was then restored with number key 3 (Front).
+
+## F8 — vacuum room cleaning (2026-11-13)
+
+M4's leftover, built from the live entities rather than from a snapshot. Discovery first, as the plan
+requires:
+
+| Robot | platform | `rooms` | `supported_features` |
+|---|---|---|---|
+| `vacuum.yiko` | `ecovacs` | `{dining_room:0, living_room1:1, corridor1:4, kitchen:2, bathroom:3}` | 29500 (SEND_COMMAND, RETURN_HOME, PAUSE, STOP, FAN_SPEED, LOCATE, STATE, START, CLEAN_AREA) |
+| `vacuum.baka` | `ecovacs` | `{default:[43,20,46,32,47,42]}` | 29500 |
+
+No `dreame_vacuum` domain exists on this server; both robots are the Deebot integration, whose documented
+room clean is `vacuum.send_command` with `command: spot_area` and `params.rooms` (ids from the entity's own
+`rooms` attribute).
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistant.kt` | `HaSession.vacuumRoom(entityId, roomId)`: `send_command` with `spot_area` and `{rooms, cleanings: 1}`, through the existing private `callService` (same timeout/no-answer semantics) |
+| `HomeAssistantPanel.kt` | `HaConnection.vacuumRoom(...)`, the same shape as `vacuum(...)`: not-connected toast, `HaException` toast |
+| `HomeAssistantTab.kt` | `vacuumRooms(entity)` reads the attribute at render time and handles both shapes — a name→id map (labelled "Dining room") and an id list ("Room 43"); `VacuumRow` gains **Clean a room** (only when the robot reports rooms) and a second menu, "Clean which room?", whose entries call the service and close both |
+
+### Deliberate designs worth keeping
+
+- **Rooms come from the robot, never from app code** (D7): a robot that learns a room needs no rebuild, and
+  one that reports none simply has no entry.
+- **One id, one service, nothing else**: the app sends the id the entity gave it, so a name change in the
+  robot's app cannot break the call.
+
+### Verified (2026-11-13, 11:38)
+
+- **The wire format, end to end against the real robot**: `vacuum.send_command` on `vacuum.yiko` with
+  `{"command":"spot_area","params":{"rooms":"2","cleanings":1}}` — the exact body `vacuumRoom` sends —
+  answered HTTP 200 and the entity went to **cleaning**; `vacuum.return_to_base` then took it to
+  **returning** and back to **Docked**. The kitchen clean ran and was stopped.
+- **The UI check did not happen**: the vacuum row sits in the Assistant tab's middle card, and the D-pad
+  run in this session never landed on it (the card's switches take the focus; the app row below caught two
+  stray OKs and opened Plexy twice). The "Clean a room" menu and its room list are therefore **built and
+  compiled, not seen on the TV**. The next step for it is one remote press on Yiko's row.

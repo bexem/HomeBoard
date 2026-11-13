@@ -605,6 +605,18 @@ class HaSession internal constructor(private val socket: WebSocket) {
     /** A vacuum: "start", "pause" or "return_to_base", as its supported features allow */
     suspend fun vacuum(entityId: String, service: String) = callService(entityId, service)
 
+    /**
+     * Cleans one room of a robot that names them: the id the entity's own `rooms` attribute gives, sent
+     * as the Deebot integration takes it (`vacuum.send_command`, `spot_area`). Nothing here knows what a
+     * room is called or how many there are.
+     */
+    suspend fun vacuumRoom(entityId: String, roomId: String) {
+        callService(entityId, "send_command") {
+            put("command", "spot_area")
+            put("params", JSONObject().put("rooms", roomId).put("cleanings", 1))
+        }
+    }
+
     /** Sets a select or input select to [option], one of its options */
     suspend fun selectOption(entityId: String, option: String) = callService(entityId, "select_option") { put("option", option) }
 

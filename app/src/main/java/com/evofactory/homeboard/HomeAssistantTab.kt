@@ -1,6 +1,7 @@
 package com.evofactory.homeboard
 
 import androidx.compose.animation.core.animateFloatAsState
+import org.json.JSONArray
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -1003,11 +1004,20 @@ private fun VacuumRow(connection: HaConnection, id: String, name: String?, modif
     val entity = connection.entities[id]
     val ready = connection.session != null
     var menuOpen by remember { mutableStateOf(false) }
+    // The rooms this robot reports, read at render time: one that learns a room needs no app change
+    val rooms = vacuumRooms(entity)
+    var roomMenu by remember { mutableStateOf(false) }
     val state = entity?.state?.replace('_', ' ').orEmpty()
     val actions = buildList {
         if (entity?.state != "cleaning") add(MenuAction("Start") { connection.vacuum(id, "start", scope, context); menuOpen = false })
         if (entity?.state == "cleaning") add(MenuAction("Pause") { connection.vacuum(id, "pause", scope, context); menuOpen = false })
         if (entity?.state != "docked") add(MenuAction("Return to dock") { connection.vacuum(id, "return_to_base", scope, context); menuOpen = false })
+        if (rooms.isNotEmpty()) {
+            add(MenuAction("Clean a room") {
+                menuOpen = false
+                roomMenu = true
+            })
+        }
     }
     Surface(
         onClick = { if (actions.isNotEmpty()) menuOpen = true },
@@ -1044,6 +1054,37 @@ private fun VacuumRow(connection: HaConnection, id: String, name: String?, modif
             onDismiss = { menuOpen = false },
         )
     }
+    if (roomMenu) {
+        ContextMenu(
+            title = "Clean which room?",
+            actions = rooms.map { (label, roomId) ->
+                MenuAction(label) {
+                    connection.vacuumRoom(id, roomId, scope, context)
+                    roomMenu = false
+                }
+            },
+            onDismiss = { roomMenu = false },
+        )
+    }
+}
+
+/**
+ * A robot's own rooms: `{name: id}` for one that names them, and `{default: [id, …]}` for one whose
+ * integration only exposes the ids. Empty when the entity reports none, which is what hides the menu.
+ */
+private fun vacuumRooms(entity: HaEntity?): List<Pair<String, String>> {
+    val rooms = entity?.attributes?.optJSONObject("rooms") ?: return emptyList()
+    val found = mutableListOf<Pair<String, String>>()
+    for (key in rooms.keys()) {
+        when (val value = rooms.opt(key)) {
+            is Number -> found += key.replace('_', ' ').replaceFirstChar { it.uppercase() } to value.toInt().toString()
+            is JSONArray -> for (i in 0 until value.length()) {
+                val roomId = value.optInt(i, -1).takeIf { it >= 0 } ?: continue
+                found += "Room $roomId" to roomId.toString()
+            }
+        }
+    }
+    return found
 }
 
 /**
