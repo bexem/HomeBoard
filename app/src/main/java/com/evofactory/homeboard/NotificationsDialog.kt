@@ -43,6 +43,10 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
     // A grant made while the app was running leaves the listener unbound until it is asked again
     LaunchedEffect(Unit) { Notifications.requestRebind(context) }
     val entries = Notifications.entries
+    // The two kinds the TV keeps: what its apps posted (dismissible) and the running services'
+    // own (ongoing, and only their own app can take them away)
+    val posted = entries.filter { it.clearable }
+    val ongoing = entries.filterNot { it.clearable }
     val first = remember { FocusRequester() }
     // The row does not exist until the list is laid out, and one frame is not always enough
     LaunchedEffect(enabled, entries.size) {
@@ -55,16 +59,16 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
         // Room for an app name, a title and two lines of text
         width = 720.dp,
         onDismiss = onDismiss,
-        // Like the drawer this stands in for: Clear all is always offered with a list, and what the
-        // TV refuses to dismiss (its ongoing services) is why some rows survive it
-        buttons = if (enabled && entries.isNotEmpty()) {
+        // The drawer's own rule: Clear all with something to clear. With nothing but ongoing ones
+        // it would be a button that does nothing, so the list says why instead
+        buttons = if (enabled && posted.isNotEmpty()) {
             listOf(DialogButton("Clear all") { Notifications.clearAll() })
         } else {
             emptyList()
         },
         contentFocus = { first },
-        hint = if (enabled && entries.isNotEmpty() && entries.none { it.clearable }) {
-            "None of these can be dismissed: they belong to running services."
+        hint = if (enabled && posted.isEmpty() && ongoing.isNotEmpty()) {
+            "Ongoing notifications belong to running services: only their app can dismiss them."
         } else {
             null
         },
@@ -81,29 +85,65 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(entries, key = { it.key }) { entry ->
-                    NotificationRow(
-                        entry = entry,
-                        modifier = Modifier
-                            .then(if (entry == entries.first()) Modifier.focusRequester(first) else Modifier)
-                            .ringToTop(),
-                        onClick = { if (Notifications.open(entry)) onDismiss() },
-                    )
+                // The posted ones need no heading — they are what the dialog is called; "Ongoing"
+                // says what the service rows are, and dims them
+                if (posted.isNotEmpty()) {
+                    items(posted, key = { it.key }) { entry ->
+                        NotificationRow(
+                            entry = entry,
+                            modifier = Modifier
+                                .then(if (entry == posted.first()) Modifier.focusRequester(first) else Modifier)
+                                .ringToTop(),
+                            onClick = { if (Notifications.open(entry)) onDismiss() },
+                        )
+                    }
+                }
+                if (ongoing.isNotEmpty()) {
+                    item(key = "ongoing-heading") { NotificationHeading("Ongoing") }
+                    items(ongoing, key = { it.key }) { entry ->
+                        NotificationRow(
+                            entry = entry,
+                            dimmed = true,
+                            modifier = Modifier
+                                .then(if (posted.isEmpty() && entry == ongoing.first()) Modifier.focusRequester(first) else Modifier)
+                                .ringToTop(),
+                            onClick = { if (Notifications.open(entry)) onDismiss() },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/** One notification: the app it is from, its title, its text, and how long it has been there */
+/** What a group of rows is: the apps' notifications, or the running services' own */
 @Composable
-private fun NotificationRow(entry: LauncherNotification, modifier: Modifier, onClick: () -> Unit) {
+private fun NotificationHeading(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 2.dp),
+    )
+}
+
+/**
+ * One notification: the app it is from, its title, its text, and how long it has been there.
+ * [dimmed] is for the ongoing ones, which the TV will not let anyone dismiss.
+ */
+@Composable
+private fun NotificationRow(
+    entry: LauncherNotification,
+    modifier: Modifier,
+    dimmed: Boolean = false,
+    onClick: () -> Unit,
+) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (dimmed) 0.2f else 0.35f),
+            contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (dimmed) 0.7f else 1f),
             focusedContainerColor = MaterialTheme.colorScheme.inverseSurface,
             focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
         ),

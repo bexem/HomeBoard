@@ -1834,3 +1834,37 @@ cannot start.
   put it back. The swap works through the shared primitive, and the order was restored.
 - Notifications dialog opens on its first row through the shared focus helper.
 - Calendar events render with summaries and locations (the `stringOrNull` path).
+
+## The notifications panel tells the two kinds apart (2026-11-13)
+
+Ema: "the clear/dismiss all on the notification drawer doesn't work, also you should distinguish actual
+notifications from persistent notifications for background apps."
+
+**Clear all was not broken** — it was offered when it had nothing to clear. `cancelAllNotifications()`
+works: a notification posted with `adb shell cmd notification post` vanished from the list the moment
+Clear all was pressed (the list updates live through `onNotificationRemoved`). Every row on this TV is
+an ongoing service notification (QuickBars, tvQuickActions ×2, Shield SMB, Dolby, Android TV Remote),
+and the TV refuses to dismiss those, so the button looked dead. The panel also drew them as if they
+were ordinary notifications.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `NotificationsDialog.kt` | The list is split by `clearable`: the apps' own notifications first, then an **Ongoing** heading with the services' own, dimmed. `Clear all` appears only when something can be cleared — with nothing to clear the hint line says why instead of offering a button that does nothing |
+
+### Deliberate designs worth keeping
+
+- **Clear all follows the drawer's rule**, not "always show": a button that cannot do anything is worse
+  than no button and one line saying why.
+- **"Ongoing" is the only heading**: the posted group is what the dialog is called, so heading it
+  "Notifications" printed the title twice (seen on the TV, then removed).
+- **The badge still counts everything**, because it is the drawer's entry point: counting only
+  dismissible ones would hide it on a TV whose only notifications are services, and the panel would
+  become unreachable.
+
+### Verified on the Shield (2026-11-13, 18:50)
+
+With a posted test notification: two groups — the dismissible row above, **Ongoing** dimmed below,
+`Clear all` in the header. Pressed Clear all: the test row went, the button disappeared, the hint
+appeared, focus moved to the first remaining row, and the six service notifications stayed.
