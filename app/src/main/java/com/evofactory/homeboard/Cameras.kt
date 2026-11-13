@@ -667,7 +667,7 @@ fun CamerasDialog(
             return@TopDialog
         }
         if (cameras.isEmpty()) {
-            Text("No camera yet", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+            EmptyState("No camera yet")
         }
         LazyColumn(
             state = listState,

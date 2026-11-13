@@ -77,6 +77,28 @@ class ListFocus {
         (lastKey?.takeIf { it in keys } ?: keys.firstOrNull())?.let(::requester)
 }
 
+/** The line a list shows when it has nothing: one type, colour and padding in every dialog */
+@Composable
+fun EmptyState(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+    )
+}
+
+/**
+ * Focus for an item that may not exist yet: two frames of grace, then the ask, which a row that
+ * still isn't there must not turn into a crash. One frame is not always enough — the row has to be
+ * composed first.
+ */
+internal suspend fun FocusRequester.requestFocusAfterLayout() {
+    withFrameNanos { }
+    withFrameNanos { }
+    runCatching { requestFocus() }
+}
+
 /** A tab in a dialog's top row: the arrows only move the selection, OK opens it */
 class DialogTab(val label: String, val selected: Boolean, val onSelect: () -> Unit)
 
@@ -188,9 +210,7 @@ fun TopDialog(
     // focused until it is laid out, so this asks for a couple of frames first
     LaunchedEffect(openFocus != null) {
         if (openFocus == null) return@LaunchedEffect
-        withFrameNanos { }
-        withFrameNanos { }
-        openFocus.invoke()?.let { runCatching { it.requestFocus() } }
+        openFocus.invoke()?.requestFocusAfterLayout()
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {

@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -48,9 +47,7 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
     // The row does not exist until the list is laid out, and one frame is not always enough
     LaunchedEffect(enabled, entries.size) {
         if (!enabled || entries.isEmpty()) return@LaunchedEffect
-        withFrameNanos { }
-        withFrameNanos { }
-        runCatching { first.requestFocus() }
+        first.requestFocusAfterLayout()
     }
 
     TopDialog(

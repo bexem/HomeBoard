@@ -20,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -595,8 +594,7 @@ fun HomeAssistantDialog(
         }
         // On the first tab, on what's chosen
         LaunchedEffect(Unit) {
-            withFrameNanos { }
-            runCatching { homeFocus.requester(homeDashboard ?: MY_SELECTION).requestFocus() }
+            homeFocus.requester(homeDashboard ?: MY_SELECTION).requestFocusAfterLayout()
         }
     }
 }
@@ -661,7 +659,7 @@ private fun TopDialogScope.EntityPicker(
             .downToContent(),
     )
     if (keys.isEmpty()) {
-        Text("Nothing matches", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        EmptyState("Nothing matches")
     }
     LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).padding(top = 4.dp)) {
         sections.forEach { (title, items) ->
@@ -691,12 +689,7 @@ private fun LazyListScope.entitySection(
         Surface(
             onClick = { onPress(entity) },
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                focusedContainerColor = MaterialTheme.colorScheme.inverseSurface,
-                focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
-            ),
+            colors = rowColors(),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
             modifier = Modifier.fillMaxWidth().then(itemModifier(entity)),
         ) {
@@ -775,18 +768,22 @@ private fun DashboardChoice(
     }
 }
 
+/** A row to choose: invisible until the remote lands on it, then inverted */
+@Composable
+private fun rowColors() = ClickableSurfaceDefaults.colors(
+    containerColor = Color.Transparent,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+    focusedContainerColor = MaterialTheme.colorScheme.inverseSurface,
+    focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
+)
+
 /** A row to choose, with a line saying more under its title, and a check mark when [checked] */
 @Composable
 private fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.inverseSurface,
-            focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        ),
+        colors = rowColors(),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         modifier = Modifier.fillMaxWidth().then(modifier),
     ) {
@@ -884,7 +881,7 @@ private fun SensorOrder(
     }
 
     if (rows.isEmpty()) {
-        Text("Nothing chosen yet", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        EmptyState("Nothing chosen yet")
     }
     LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 4.dp)) {
         items(rows, key = { it.key }) { row ->

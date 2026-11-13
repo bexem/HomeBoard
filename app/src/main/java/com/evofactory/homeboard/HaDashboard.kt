@@ -89,7 +89,7 @@ fun parseDashboard(config: JSONObject?): HaDashboard? {
             cards.read(card)
             cards.close()
         }
-        val title = view.string("title") ?: view.string("path") ?: "View ${index + 1}"
+        val title = view.stringOrNull("title") ?: view.stringOrNull("path") ?: "View ${index + 1}"
         DashboardView(title, cards.cards).takeIf { it.cards.isNotEmpty() }
     }
     return HaDashboard(views, names, skipped.toList())
@@ -130,28 +130,28 @@ private class CardBuilder(private val prefix: String, private val names: Mutable
     fun read(card: JSONObject) {
         when (val type = card.optString("type")) {
             "heading" -> {
-                heading(card.string("heading"))
+                heading(card.stringOrNull("heading"))
                 card.optJSONArray("badges")?.items()?.forEach { add(entityOf(it)) }
             }
             in Stacks -> {
-                heading(card.string("title"))
+                heading(card.stringOrNull("title"))
                 card.optJSONArray("cards").objects().forEach(::read)
             }
             "conditional" -> card.optJSONObject("card")?.let(::read)
-            "weather-forecast" -> add(card.string("entity"), card.string("name"))
+            "weather-forecast" -> add(card.stringOrNull("entity"), card.stringOrNull("name"))
             in ListCards -> {
-                heading(card.string("title"))
+                heading(card.stringOrNull("title"))
                 card.optJSONArray("entities")?.items()?.forEach { row ->
-                    add(entityOf(row), (row as? JSONObject)?.string("name"))
+                    add(entityOf(row), (row as? JSONObject)?.stringOrNull("name"))
                 }
             }
             "gauge" -> {
-                val id = card.string("entity")
-                add(id, card.string("name"))
+                val id = card.stringOrNull("entity")
+                add(id, card.stringOrNull("name"))
                 if (id != null && id in ids) gauges[id] = parseGauge(card)
             }
             "history-graph" -> {
-                heading(card.string("title"))
+                heading(card.stringOrNull("title"))
                 val graph = parseGraph(card)
                 if (graph.entities.isEmpty()) return
                 // In the card's entities, in its place
@@ -160,9 +160,9 @@ private class CardBuilder(private val prefix: String, private val names: Mutable
                 graphs[key] = graph
             }
             in EntityCards -> {
-                val id = card.string("entity")
+                val id = card.stringOrNull("entity")
                 // Without an entity, e.g. a button that opens another page: nothing to show
-                if (id != null) add(id, card.string("name")) else skipped += type
+                if (id != null) add(id, card.stringOrNull("name")) else skipped += type
             }
             else -> skipped += type.ifEmpty { "card without a type" }
         }
@@ -183,14 +183,8 @@ private val EntityCards = setOf(
 /** The entity of a row or badge: "light.kitchen", or { "entity": "light.kitchen" } */
 private fun entityOf(item: Any?): String? = when (item) {
     is String -> item
-    is JSONObject -> item.string("entity")
+    is JSONObject -> item.stringOrNull("entity")
     else -> null
 }
 
-private fun JSONArray?.objects(): List<JSONObject> =
-    if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }
-
 private fun JSONArray.items(): List<Any?> = (0 until length()).map { opt(it) }
-
-/** The string at [key]; null if missing, null or empty */
-private fun JSONObject.string(key: String): String? = if (isNull(key)) null else optString(key).ifEmpty { null }

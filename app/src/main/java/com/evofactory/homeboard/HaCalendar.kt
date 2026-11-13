@@ -34,14 +34,9 @@ data class HaEvent(
         /** A date alone is an all-day event: Home Assistant sends "2026-11-14" and nothing more */
         private val dateOnly = Regex("""\d{4}-\d{2}-\d{2}""")
 
-        // Small private readers: Home Assistant's JSON omits what it has no value for, and a time
-        // arrives as a string over the websocket but as an object over REST, so only real strings count
-        private fun JSONObject.text(key: String): String? =
-            (opt(key) as? String)?.takeIf { it.isNotEmpty() }
-
         /** One event from either shape Home Assistant sends, or null when it has nothing to show */
         fun from(calendarId: String, json: JSONObject): HaEvent? {
-            val summary = json.text("summary") ?: json.text("message") ?: return null
+            val summary = json.stringOrNull("summary") ?: json.stringOrNull("message") ?: return null
             val startText = json.time("start") ?: return null
             val zone = ZoneId.systemDefault()
             return if (dateOnly.matches(startText)) {
@@ -50,7 +45,7 @@ data class HaEvent(
                     summary = summary,
                     start = null,
                     startDay = LocalDate.parse(startText),
-                    location = json.text("location"),
+                    location = json.stringOrNull("location"),
                 )
             } else {
                 val start = parseTime(startText) ?: return null
@@ -60,16 +55,16 @@ data class HaEvent(
                     start = start,
                     startDay = start.withZoneSameInstant(zone).toLocalDate(),
                     end = json.time("end")?.let(::parseTime),
-                    location = json.text("location"),
+                    location = json.stringOrNull("location"),
                 )
             }
         }
 
         /** A time as the websocket sends it (a string) or the REST API does ({date} or {dateTime}) */
         private fun JSONObject.time(key: String): String? {
-            text(key)?.let { return it }
+            stringOrNull(key)?.let { return it }
             val value = optJSONObject(key) ?: return null
-            return value.text("dateTime") ?: value.text("date")
+            return value.stringOrNull("dateTime") ?: value.stringOrNull("date")
         }
 
         private fun parseTime(text: String): ZonedDateTime? =
@@ -136,11 +131,12 @@ fun calendarColour(choices: List<String>, id: String): String? =
     choices.firstOrNull { it.startsWith("$id=") }?.substringAfter("=", "")?.takeIf { it.isNotEmpty() }
 
 /** "#RRGGBB" from the palette, or the palette's first colour when nothing is chosen */
-fun colourOf(hex: String?): Color {
-    val text = hex?.removePrefix("#") ?: return Color(0xFF7CB342)
-    val value = runCatching { text.toLong(16) }.getOrNull() ?: return Color(0xFF7CB342)
-    return Color(0xFF000000 or value)
-}
+/**
+ * A calendar's colour, from any colour text Home Assistant or the launcher's palette holds. The one
+ * parser (cssColor) reads short and full hex and every CSS form; green is the calendar default when
+ * there is nothing to read.
+ */
+fun colourOf(hex: String?): Color = cssColor(hex) ?: Color(0xFF7CB342)
 
 /** A day's events under its heading */
 data class HaEventGroup(val title: String, val events: List<HaEvent>)

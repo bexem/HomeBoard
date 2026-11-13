@@ -196,17 +196,17 @@ class HaEntity(
     val area: String? = null,
 ) {
     val domain get() = id.substringBefore('.')
-    val fullName: String get() = attributes.string("friendly_name") ?: id
+    val fullName: String get() = attributes.stringOrNull("friendly_name") ?: id
     // The launcher's own label wins: Home Assistant's friendly names follow a naming scheme from
     // years ago ("Living Room - Lights - Main"), and renaming a device here leaves its entity_id alone
     val name: String get() = EntityNames.label(id, entityName ?: fullName)
-    val unit: String? get() = attributes.string("unit_of_measurement")
+    val unit: String? get() = attributes.stringOrNull("unit_of_measurement")
 
     /** What it measures or detects, e.g. "temperature" or "door"; null if not set */
-    val deviceClass: String? get() = attributes.string("device_class")
+    val deviceClass: String? get() = attributes.stringOrNull("device_class")
 
     /** Material Design Icons name, as on the Home Assistant dashboard: the one set for it, or its type's */
-    val icon: String get() = attributes.string("icon") ?: defaultHaIcon(domain, deviceClass, state)
+    val icon: String get() = attributes.stringOrNull("icon") ?: defaultHaIcon(domain, deviceClass, state)
 
     /** Scenes, scripts and buttons: shown as buttons that run them */
     val isAction get() = domain in ActionDomains
@@ -218,7 +218,7 @@ class HaEntity(
 
     /** Weather: the current temperature, in [temperatureUnit] */
     val temperature: Double? get() = attributes.optDouble("temperature").takeUnless { it.isNaN() }
-    val temperatureUnit: String? get() = attributes.string("temperature_unit")
+    val temperatureUnit: String? get() = attributes.stringOrNull("temperature_unit")
 
     /** The reading as shown, e.g. "12.4 °C" or "Open"; a dash while the sensor has no value */
     val reading: String
@@ -268,14 +268,14 @@ private fun formatTimestamp(state: String): String? {
 /** One step of a weather forecast: an hour or a day */
 class HaForecast(json: JSONObject) {
     /** When it starts; null if Home Assistant gave no time this app understands */
-    val time: ZonedDateTime? = json.string("datetime")?.let {
+    val time: ZonedDateTime? = json.stringOrNull("datetime")?.let {
         try {
             OffsetDateTime.parse(it).atZoneSameInstant(ZoneId.systemDefault())
         } catch (_: DateTimeParseException) {
             null
         }
     }
-    val condition: String? = json.string("condition")
+    val condition: String? = json.stringOrNull("condition")
     val temperature: Double? = json.optDouble("temperature").takeUnless { it.isNaN() }
 
     /** The day's lowest temperature, in daily forecasts */
@@ -292,10 +292,15 @@ private val PressedDomains = setOf("button", "input_button")
 
 private class HaRegistryEntry(val name: String?, val area: String?)
 
-/** The string at [key]; null if missing, null or empty */
-private fun JSONObject.string(key: String): String? = if (isNull(key)) null else optString(key).ifEmpty { null }
+/**
+ * The readers every Home Assistant JSON goes through: the string at [key] — only a real one, null
+ * when it is absent, empty, or another kind (a time arrives as a string over the websocket but as an
+ * object over REST) — and the objects of an array, skipping anything else in it.
+ */
+internal fun JSONObject.stringOrNull(key: String): String? =
+    (opt(key) as? String)?.takeIf { it.isNotEmpty() }
 
-private fun JSONArray?.objects(): List<JSONObject> =
+internal fun JSONArray?.objects(): List<JSONObject> =
     if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }
 
 /**
@@ -463,12 +468,12 @@ class HaSession internal constructor(private val socket: WebSocket) {
         val entities = (optionalCommand("config/entity_registry/list_for_display") as? JSONObject)
             ?.optJSONArray("entities") ?: return emptyMap()
         val areaNames = (optionalCommand("config/area_registry/list") as? JSONArray).objects()
-            .associate { it.optString("area_id") to it.string("name") }
+            .associate { it.optString("area_id") to it.stringOrNull("name") }
         val deviceAreas = (optionalCommand("config/device_registry/list") as? JSONArray).objects()
-            .associate { it.optString("id") to it.string("area_id") }
+            .associate { it.optString("id") to it.stringOrNull("area_id") }
         return entities.objects().associate { entry ->
-            val areaId = entry.string("ai") ?: entry.string("di")?.let { deviceAreas[it] }
-            entry.optString("ei") to HaRegistryEntry(entry.string("en"), areaId?.let { areaNames[it] })
+            val areaId = entry.stringOrNull("ai") ?: entry.stringOrNull("di")?.let { deviceAreas[it] }
+            entry.optString("ei") to HaRegistryEntry(entry.stringOrNull("en"), areaId?.let { areaNames[it] })
         }
     }
 
@@ -533,11 +538,11 @@ class HaSession internal constructor(private val socket: WebSocket) {
     suspend fun dashboards(): List<HaDashboardInfo> =
         listOf(HaDashboardInfo(null, "Overview")) +
             (optionalCommand("lovelace/dashboards/list") as? JSONArray).objects().mapNotNull { board ->
-                val path = board.string("url_path") ?: return@mapNotNull null
+                val path = board.stringOrNull("url_path") ?: return@mapNotNull null
                 // The default dashboard is listed under the path its own URL uses: the first entry
                 // above is it, so this copy would read as a second "Overview" that saves as the first
                 if (path == HA_DEFAULT_DASHBOARD_PATH) return@mapNotNull null
-                HaDashboardInfo(path, board.string("title") ?: path)
+                HaDashboardInfo(path, board.stringOrNull("title") ?: path)
             }
 
     /**
@@ -554,7 +559,7 @@ class HaSession internal constructor(private val socket: WebSocket) {
     suspend fun followDashboardEdits(urlPaths: Set<String?>, onSaved: () -> Unit): Boolean = try {
         subscribe("subscribe_events", { put("event_type", "lovelace_updated") }) { event ->
             val data = event.optJSONObject("data")
-            if (data?.string("url_path") in urlPaths) onSaved()
+            if (data?.stringOrNull("url_path") in urlPaths) onSaved()
         }
         true
     } catch (_: HaException) {

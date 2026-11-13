@@ -1804,3 +1804,33 @@ The Assistant tab walked on the new build with no regression: sensors, steppable
 strip), vacuum, alarm and scripts all render and hold focus as before. The select row itself cannot be
 seen until a select entity is chosen — noted honestly; the fix is the same geometry as the verified
 TopDialog header, in the opposite direction.
+
+## One reader, one parser, one swap, one empty state (2026-11-13)
+
+The audit's low finding, landed. Nothing here was visibly disagreeing yet; this is drift removed so it
+cannot start.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistant.kt` | The one JSON reader pair: `JSONObject.stringOrNull` (only a real string counts — a time arrives as a string over the websocket but as an object over REST) and `JSONArray?.objects`, both `internal` for the package |
+| `HaCalendar.kt`, `HaDashboard.kt`, `HaHistory.kt` | Their private copies (`text`/`string`/`objects`) deleted; call sites on the shared pair |
+| `HaCalendar.kt` | `colourOf` delegates to `cssColor` — the one parser, which also reads 3- and 8-digit hex, so a `#e45` no longer paints two ways; green stays the calendar default |
+| `EntityPickerDialog.kt` | `List.swapping(from, to)`: the one swap, bounds-checked |
+| `EntityPickerDialog.kt`, `HomeAssistantTab.kt` | The picker's move and `moveSensor` both go through it; `moveSensorCard` keeps its own remove-and-insert (a card shift is not a swap — not forced in), and the card boundary in `moveSensor` is preserved |
+| `TopDialog.kt` | `EmptyState` (one type, colour and padding for a list's nothing-line) and `FocusRequester.requestFocusAfterLayout` (two frames, then the ask) |
+| `HomeAssistantDialog.kt` (×2), `Cameras.kt`, `ExportImport.kt` | The four plain nothing-lines are `EmptyState`; `AlertsMessage` (it can be an error), AppRow's hero and CalendarWidget's `Detail` stay — different components, not drift |
+| `HomeAssistantDialog.kt` | `rowColors()` for its two identical choice rows — the audit's "four sites" turned out to be three deliberate recipes (dimmed toggle rows, round action chips, notification rows); only the true pair is shared |
+| `NotificationsDialog.kt`, `SettingsPage.kt`, `HomeAssistantDialog.kt`, `TopDialog.kt` | The four two-frames-then-requestFocus blocks are the one helper; the HA dialog's one-frame copy gains the second frame |
+| `SettingsPage.kt` | The dead trailing `Spacer(weight(1f))` after `LogSize` is gone |
+
+### Verified on the Shield (2026-11-13, 18:30)
+
+- Calendar colours pixel-sampled on the Home tab: `#FFFFB3`, `#C4C466`, `#C466C4`, `#2F2F8A`,
+  `#3DDC84` — exactly the stored `calendar_colours`; a first vision pass read them as one green, the
+  pixels say otherwise.
+- Calendars picker (Which calendars, order matters): Left on Birthdays moved it Priority 10 → 9; Right
+  put it back. The swap works through the shared primitive, and the order was restored.
+- Notifications dialog opens on its first row through the shared focus helper.
+- Calendar events render with summaries and locations (the `stringOrNull` path).

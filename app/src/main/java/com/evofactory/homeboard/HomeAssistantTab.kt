@@ -161,16 +161,11 @@ fun moveSensorCard(ids: List<String>, entities: Map<String, HaEntity>, key: Stri
 
 /** [ids] with [id] moved [by] places within its card, by swapping with its neighbour */
 fun moveSensor(ids: List<String>, entities: Map<String, HaEntity>, id: String, by: Int): List<String> {
-    val group = sensorCards(ids, entities).firstOrNull { id in it.ids }?.ids
-    val other = group?.getOrNull(group.indexOf(id) + by) ?: return ids
-    // Swapped in place: the card's first sensor stays where it was, so the cards keep their order
-    return ids.map {
-        when (it) {
-            id -> other
-            other -> id
-            else -> it
-        }
-    }
+    // The neighbour is the card's own: the swap never crosses into the next card, so the card's
+    // first sensor stays put and the cards keep their order
+    val group = sensorCards(ids, entities).firstOrNull { id in it.ids }?.ids ?: return ids
+    val other = group.getOrNull(group.indexOf(id) + by) ?: return ids
+    return ids.swapping(ids.indexOf(id), ids.indexOf(other))
 }
 
 // The cards show this far into the margins above and below them, half of each, where they fade out

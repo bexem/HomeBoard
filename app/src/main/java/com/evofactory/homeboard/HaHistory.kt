@@ -65,7 +65,7 @@ fun parseGraph(card: JSONObject): HaGraph {
     val entities = (0 until (rows?.length() ?: 0)).mapNotNull { index ->
         when (val row = rows?.opt(index)) {
             is String -> GraphEntity(row, null, null)
-            is JSONObject -> row.text("entity")?.let { GraphEntity(it, row.text("name"), cssColor(row.text("color"))) }
+            is JSONObject -> row.stringOrNull("entity")?.let { GraphEntity(it, row.stringOrNull("name"), cssColor(row.stringOrNull("color"))) }
             else -> null
         }
     }.filter { it.id.contains('.') }.distinctBy { it.id }
@@ -77,8 +77,6 @@ fun parseGraph(card: JSONObject): HaGraph {
         fitY = card.optBoolean("fit_y_data"),
     )
 }
-
-private fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).ifEmpty { null }
 
 // History is read again this often; changes in between are added as they come
 private const val HISTORY_REFRESH_MS = 5 * 60_000L

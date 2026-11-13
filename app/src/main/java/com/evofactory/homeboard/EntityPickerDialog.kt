@@ -26,6 +26,14 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
+/**
+ * [this] with the entries at [from] and [to] exchanged, or [this] itself when either place is out of
+ * the list: the one swap, for the rows a picker moves and the sensors a card reorders.
+ */
+internal fun <T> List<T>.swapping(from: Int, to: Int): List<T> =
+    if (from !in indices || to !in indices) this
+    else toMutableList().also { it[from] = this[to]; it[to] = this[from] }
+
 /** One row of an [EntityPickerDialog]: what it is, what it reads as, and the line under that */
 data class PickerRow(val id: String, val label: String, val detail: String)
 
@@ -69,9 +77,7 @@ fun EntityPickerDialog(
 
     fun move(id: String, delta: Int) {
         val from = chosen.indexOf(id)
-        val to = from + delta
-        if (from < 0 || to !in chosen.indices) return
-        onChange(chosen.toMutableList().also { it[from] = chosen[to]; it[to] = chosen[from] })
+        onChange(chosen.swapping(from, from + delta))
     }
 
     TopDialog(

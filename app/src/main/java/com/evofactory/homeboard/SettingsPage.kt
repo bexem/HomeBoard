@@ -27,7 +27,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -199,9 +198,7 @@ fun SettingsPage(
     // enough, so this keeps asking for a few frames instead of losing the remote to the rail
     LaunchedEffect(focusRowRequest) {
         if (focusRowRequest == 0) return@LaunchedEffect
-        withFrameNanos { }
-        withFrameNanos { }
-        runCatching { contentFirst.requestFocus() }
+        contentFirst.requestFocusAfterLayout()
     }
 }
 
@@ -437,7 +434,6 @@ private fun SectionPage(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     LogSize()
-                    Spacer(Modifier.weight(1f))
                 }
             }
         }

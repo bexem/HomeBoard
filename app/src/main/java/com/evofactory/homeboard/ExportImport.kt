@@ -267,7 +267,7 @@ fun ChecklistDialog(
     ) {
         above()
         if (allKeys.isEmpty()) {
-            Text("Nothing here", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+            EmptyState("Nothing here")
         }
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
             sections.forEach { section ->
