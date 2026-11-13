@@ -843,6 +843,64 @@ bird: **no badge**. Two things were tried on it and one was rejected:
 Verified in both rail states: on the dark rail the bird holds its shape, and on the focused light row the
 dark tint reads as clearly as the Home or Cameras glyphs beside it.
 
+## C1 — dead code and one colour pair (2026-11-13)
+
+Audit findings #3, #4 and #10, plus two items the UX review found (H9). Zero behaviour change: nothing a
+person can see or press changed.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `SettingsMenuDialog.kt` | `HelperStatusRow` and `BuildInfo` deleted (the home helper became a row in M14 and the About page prints the same version), with the `OpenHomeAssistant` case and the 32 imports only they used |
+| `SettingsSchema.kt` | The never-emitted `SettingAction.OpenHomeAssistant` deleted |
+| `SettingsPage.kt` | The unused `onOpenAccessibility` parameter (its only consumer was `HelperStatusRow`) and the dead `"home_assistant"` `rowSummary` branch — no row has had that key since M13 split it into Address / Log in / Log out |
+| `MainActivity.kt` | One line: that argument at the `SettingsPage` call |
+| `Theme.kt` | `MarkOn` / `MarkOff`, the muted pair |
+| `CalendarPickerDialog.kt`, `HaCamerasDialog.kt`, `FavouritesEditorDialog.kt`, `ExportImport.kt`, `LauncherSettingsDialog.kt`, `SettingsMenuDialog.kt` | Six local colour pairs (`0xFF5A595F` / `0xFF8E8C92`) deleted; every use reads `MarkOn` / `MarkOff` |
+| `BackgroundPickers.kt` | The write-only `var focused` and its `onFocusChanged`, with the four imports it orphaned |
+| `HaCamerasDialog.kt` | Three copy-paste doc comments that said "calendars" in the camera picker |
+
+### Deliberate designs worth keeping
+
+- **One pair, named for what it marks**: a tick box's fill, a quiet switch's track and an idle dot are the
+  same two values by intent, so they are one `MarkOn`/`MarkOff` in `Theme.kt` beside `SwitchOn`.
+- **`grep` is the acceptance test for a deletion item**: `HelperStatusRow`, `BuildInfo`,
+  `OpenHomeAssistant`, and each of the six colour names return nothing in the tree.
+
+## C2 — one URL normaliser (2026-11-13)
+
+Audit finding #6: `normalizeHaUrl` and `normalizeFrigateUrl` were the same function with two defaults.
+
+### New files
+
+| File | What it is |
+|---|---|
+| `Urls.kt` | `normalizeUrl(input, defaultScheme, defaultPort)`: the scheme is assumed when the text names none, the port when it names none, and anything after the server (a copied path, query or fragment) is dropped |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistant.kt` | `normalizeHaUrl` is `normalizeUrl(input, "http", 8123)` |
+| `Frigate.kt` | `normalizeFrigateUrl` is `normalizeUrl(input, "https", FRIGATE_PORT)` |
+
+### Deliberate designs worth keeping
+
+- **The public names stayed.** Callers are unchanged (two address dialogs, the Frigate dialog, the login
+  step), and no storage key moved: this is one implementation behind two names, not a rename.
+
+### Verified on the Shield (2026-11-13, 09:3x)
+
+Typed into Home Assistant → Address, reading the dialog's own "Will be saved as" line, which is the
+normaliser's answer:
+
+- `192.168.1.20` → **http://192.168.1.20:8123**
+- `homeassistant.local:8123` → **http://homeassistant.local:8123**
+- `http://<ha-host>:8123/lovelace/0` → **http://<ha-host>:8123**
+
+Nothing was saved: the address is still `http://<ha-host>:8123`.
+
 ## C3 — one colour picker (2026-11-13)
 
 The audit's findings #1 and #7: the background's palette dialog and the calendar's colour dialog were the
@@ -944,8 +1002,10 @@ Audit finding #5: `HomeOption` (ListItem + the library `Switch`), `CameraDialog`
 
 ### Deliberate designs worth keeping
 
-- **The row doesn't decide its own width.** `SwitchRow` renders at the caller's modifier: full width where
-  it is a settings row, compact where two sit side by side in the camera dialog (that layout is unchanged).
+- **The row doesn't decide its own width, and the gap stays outside it.** `SwitchRow` renders at the
+  caller's modifier: full width where it is a settings row, compact where two sit side by side in the
+  camera dialog (that layout is unchanged). Callers pass `padding(...).fillMaxWidth()`, not the reverse, so
+  the focused background covers the row and not the 8dp gap above it (found in review).
 - **One mark, one meaning**: filled blue with the knob right when on, an outline with the knob left when
   off, drawn in the row's own content colour so it stays legible on the light focused row.
 
