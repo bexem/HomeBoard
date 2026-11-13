@@ -791,16 +791,20 @@ val AllSettings: List<SettingDef> = listOf(
         "A count beside the clock: the next row says what it counts, and OK on it opens that",
         LauncherPrefs::badge,
         // A Frigate count needs the Alerts tab; the TV's notifications do not
-        showIf = { it.alertsTab || it.badgeSource == BADGE_SOURCE_NOTIFICATIONS },
+        showIf = { it.alertsTab || it.badgeSource != BADGE_SOURCE_FRIGATE },
     ),
     choice(
         "badge_source",
         SettingSection.Advanced,
         "Top bar",
         "The count is",
-        "Frigate alerts open the Alerts tab, and the tab's dot stands down; the TV's notifications open the panel, and the dot stays Frigate's",
+        "Frigate alerts open the Alerts tab, and the tab's dot stands down; the TV's notifications open the panel, which lists what the count counts; the dot stays Frigate's",
         LauncherPrefs::badgeSource,
-        listOf(BADGE_SOURCE_FRIGATE to "Frigate alerts", BADGE_SOURCE_NOTIFICATIONS to "The TV's notifications"),
+        listOf(
+            BADGE_SOURCE_FRIGATE to "Frigate alerts",
+            BADGE_SOURCE_NOTIFICATIONS to "Everything the TV shows",
+            BADGE_SOURCE_DISMISSIBLE to "Only what can be dismissed",
+        ),
         showIf = { it.badge },
     ),
     toggle(

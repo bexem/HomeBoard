@@ -36,7 +36,7 @@ import androidx.tv.material3.Text
  * instead of listing nothing.
  */
 @Composable
-fun NotificationsDialog(onDismiss: () -> Unit) {
+fun NotificationsDialog(dismissibleOnly: Boolean = false, onDismiss: () -> Unit) {
     val context = LocalContext.current
     // The system's answer, or the listener's: whichever says yes, there is a list to draw
     val enabled = Notifications.granted || Notifications.enabled(context)
@@ -44,9 +44,10 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
     LaunchedEffect(Unit) { Notifications.requestRebind(context) }
     val entries = Notifications.entries
     // The two kinds the TV keeps: what its apps posted (dismissible) and the running services'
-    // own (ongoing, and only their own app can take them away)
+    // own (ongoing, and only their own app can take them away). [dismissibleOnly] is the count's
+    // source being the dismissible ones: the panel then lists what it counted, and nothing else
     val posted = entries.filter { it.clearable }
-    val ongoing = entries.filterNot { it.clearable }
+    val ongoing = if (dismissibleOnly) emptyList() else entries.filterNot { it.clearable }
     val first = remember { FocusRequester() }
     // The row does not exist until the list is laid out, and one frame is not always enough
     LaunchedEffect(enabled, entries.size) {
@@ -67,6 +68,7 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
             emptyList()
         },
         contentFocus = { first },
+        // Only with rows to explain: an empty list already says why in its own line
         hint = if (enabled && posted.isEmpty() && ongoing.isNotEmpty()) {
             "Ongoing notifications belong to running services: only their app can dismiss them."
         } else {
@@ -75,8 +77,8 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
     ) {
         when {
             !enabled -> NotificationAccessOff()
-            entries.isEmpty() -> Text(
-                "Nothing on the TV right now.",
+            entries.isEmpty() || (dismissibleOnly && posted.isEmpty()) -> Text(
+                if (dismissibleOnly) "Nothing the TV lets an app dismiss right now." else "Nothing on the TV right now.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),

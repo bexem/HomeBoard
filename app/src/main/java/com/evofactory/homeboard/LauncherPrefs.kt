@@ -398,10 +398,14 @@ class LauncherPrefs(context: Context) {
         set(value) = prefs.edit { putBoolean("badge", value) }
 
     /** A dot on the Alerts tab while there are alerts nobody has looked at */
-    /** What the count beside the clock counts: [BADGE_SOURCE_FRIGATE] or [BADGE_SOURCE_NOTIFICATIONS] */
+    /**
+     * What the count beside the clock counts, and what the panel behind it lists:
+     * [BADGE_SOURCE_FRIGATE], [BADGE_SOURCE_NOTIFICATIONS] (every one the TV shows) or
+     * [BADGE_SOURCE_DISMISSIBLE] (only the ones an app may dismiss)
+     */
     var badgeSource: String
         get() = prefs.getString("badge_source", BADGE_SOURCE_FRIGATE)
-            ?.takeIf { it in setOf(BADGE_SOURCE_FRIGATE, BADGE_SOURCE_NOTIFICATIONS) } ?: BADGE_SOURCE_FRIGATE
+            ?.takeIf { it in BadgeSources } ?: BADGE_SOURCE_FRIGATE
         set(value) = prefs.edit { putString("badge_source", value) }
 
     var alertsDot: Boolean
@@ -613,6 +617,10 @@ const val CAMERA_SIDE_HALF = "half"
 
 const val BADGE_SOURCE_FRIGATE = "frigate"
 const val BADGE_SOURCE_NOTIFICATIONS = "notifications"
+const val BADGE_SOURCE_DISMISSIBLE = "dismissible"
+
+/** The values the count's source may hold: a stored one outside these reads as Frigate */
+val BadgeSources = setOf(BADGE_SOURCE_FRIGATE, BADGE_SOURCE_NOTIFICATIONS, BADGE_SOURCE_DISMISSIBLE)
 val CAMERA_SIDES = listOf(CAMERA_SIDE_LEFT, CAMERA_SIDE_CENTRE, CAMERA_SIDE_TWO_FIFTHS, CAMERA_SIDE_HALF, CAMERA_SIDE_WIDER)
 
 val SHUFFLE_HOURS = 0..24

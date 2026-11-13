@@ -533,13 +533,14 @@ class MainActivity : ComponentActivity() {
                             newEvents = when {
                                 !badge -> 0
                                 badgeSource == BADGE_SOURCE_NOTIFICATIONS -> Notifications.entries.size
+                                badgeSource == BADGE_SOURCE_DISMISSIBLE -> Notifications.entries.count { it.clearable }
                                 frigate.isSet && alertsTab -> newEvents
                                 else -> 0
                             },
                             // The dot is Frigate's, and stands down while the badge already counts Frigate
                             alertsDot = alertsDot && !frigateCounted && frigate.isSet && alertsTab && newEvents > 0,
                             onNewEvents = {
-                                if (badgeSource == BADGE_SOURCE_NOTIFICATIONS) {
+                                if (badgeSource != BADGE_SOURCE_FRIGATE) {
                                     // The count is the notifications: OK opens what it counts
                                     notificationsOpen = true
                                 } else {
@@ -1049,7 +1050,11 @@ class MainActivity : ComponentActivity() {
                         ScreensaverStatusDialog(onDismiss = { screensaverStatusOpen = false })
                     }
                     if (notificationsOpen) {
-                        NotificationsDialog(onDismiss = { notificationsOpen = false })
+                        NotificationsDialog(
+                            // What the count counted is what the panel lists
+                            dismissibleOnly = badgeSource == BADGE_SOURCE_DISMISSIBLE,
+                            onDismiss = { notificationsOpen = false },
+                        )
                     }
                     if (haServicesOpen) {
                         HaServicesDialog(

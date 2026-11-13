@@ -1868,3 +1868,39 @@ were ordinary notifications.
 With a posted test notification: two groups — the dismissible row above, **Ongoing** dimmed below,
 `Clear all` in the header. Pressed Clear all: the test row went, the button disappeared, the hint
 appeared, focus moved to the first remaining row, and the six service notifications stayed.
+
+## The count chooses what it counts (2026-11-13)
+
+Ema: "You can give the option, to show all type of notifications or just dismissable notifications or
+none or the frigate ones!"
+
+`badge_source` gained a third value instead of a new key (storage keys and the export format stay as
+they are):
+
+| Choice | Counts | OK opens | The panel lists |
+|---|---|---|---|
+| Frigate alerts | unseen Frigate events | the Alerts tab | — (the tab's own list) |
+| Everything the TV shows | every notification | the panel | both groups: posted, then **Ongoing** |
+| Only what can be dismissed | the `clearable` ones | the panel | posted only |
+
+"None" is the existing *New events badge* switch above it — off is off, one writer, no fourth value
+duplicating a toggle.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | `BADGE_SOURCE_DISMISSIBLE` + `BadgeSources`; a stored value outside the three still reads as Frigate |
+| `SettingsSchema.kt` | The row's three choices; the badge switch shows for every notification source |
+| `MainActivity.kt` | The count for the dismissible source; OK opens the panel for either notification source; the panel gets `dismissibleOnly` |
+| `NotificationsDialog.kt` | `dismissibleOnly` hides the Ongoing group and says "Nothing the TV lets an app dismiss right now." when it empties; the hint only explains rows that are there (the empty line said it twice on the first build — caught on the TV) |
+
+### Verified on the Shield (2026-11-13, 19:30–19:45)
+
+- Three choices in the row on the TV: Frigate alerts / Everything the TV shows / Only what can be
+  dismissed.
+- With "Only what can be dismissed" and no dismissible notifications: **no badge** (the six ongoing
+  ones do not count).
+- With one posted test notification: badge shows 1; the panel lists that row alone (no Ongoing
+  group); Clear all removes it, the button goes, and the empty line reads once.
+- Restored to "Everything the TV shows" (his setting).
