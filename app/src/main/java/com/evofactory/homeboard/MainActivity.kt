@@ -389,9 +389,9 @@ class MainActivity : ComponentActivity() {
                     val alertsRowFocus = remember { FocusRequester() }
                     // From reaching the row until the remote is back on the tiles, wherever it goes meanwhile
                     var alertsRowShown by remember { mutableStateOf(false) }
-                    // Not on the Alerts tab, nor on the Assistant tab unless chosen in the Home Assistant dialog
-                    // On the Home tab only when asked for: the events belong to Cameras and Alerts there
-                    val alertsRowAllowed = tab == HomeTab.Cameras || homeAlertsRow
+                    // Each tab's own switch is its gate: the Cameras tab always shows the strip, the Assistant
+                    // tab has "Alerts and apps below", and Home's row switch stays about Home
+                    val alertsRowAllowed = tab == HomeTab.Cameras || tab == HomeTab.Assistant || homeAlertsRow
                     val alertsRowFeed = frigateFeed?.takeIf { tab != HomeTab.Alerts && bottomRow && alertsRowAllowed }
                     val hasAlertsRow = alertsRowFeed != null && alertsRowFeed.rowAlerts.isNotEmpty()
                     LaunchedEffect(hasAlertsRow) { if (!hasAlertsRow) alertsRowShown = false }

@@ -1152,3 +1152,24 @@ notifications, which its title does not promise; with access off, both led to th
   Close — not the list.
 - OK on **Notifications panel** opened the list (QuickBars, SHIELD Experience Upgrade, tvQuickActions ×2,
   Shield SMB Server, DolbyAudioService, Android TV Remote Service). Nothing was cleared.
+
+## F6 — the Assistant tab's strip is not gated by a Home setting (2026-11-13)
+
+H6, decided by Ema: the Assistant tab's own switch is its only gate, as it is on the Cameras tab. The
+strip there needed **both** `ha_bottom_row` and Home's "Alert strip", and neither row said so, so someone
+who turned on "Alerts and apps below" and saw nothing had no pointer to the Home switch blocking it.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `MainActivity.kt` | `alertsRowAllowed = tab == Cameras \|\| tab == Assistant \|\| homeAlertsRow` — the Assistant tab is exempt from the Home switch, exactly like Cameras |
+| `SettingsSchema.kt` | "Alert strip" says which tab it governs: "…on this tab; Cameras and Alerts always show it, and the Assistant tab has its own switch" |
+
+### Verified on the Shield (2026-11-13, 11:0x)
+
+- With `home_alerts_row=false` and `ha_bottom_row=true`: the Assistant tab showed the strip of Frigate
+  clips along the bottom (screenshot). Before this it stayed hidden until the Home switch was also on.
+- Turning **Alerts and apps below** off (`ha_bottom_row=false`) removed it from the Assistant tab again
+  (screenshot: three cards and nothing under them).
+- Both prefs back where they were: `ha_bottom_row=false`, `home_alerts_row=false`.

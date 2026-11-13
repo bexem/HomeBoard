@@ -329,7 +329,7 @@ val AllSettings: List<SettingDef> = listOf(
         SettingSection.Home,
         "Rows",
         "Alert strip",
-        "The strip of Frigate events above the apps; off keeps them on the Cameras and Alerts tabs",
+        "The strip of Frigate events above the apps on this tab; Cameras and Alerts always show it, and the Assistant tab has its own switch",
         LauncherPrefs::homeAlertsRow,
     ),
     toggle(
