@@ -379,11 +379,12 @@ fun AppRow(
             add(MenuAction("Unpin from favourites") { onUnpin(app) })
         } else {
             add(MenuAction("Pin to favourites") { onPin(app) })
-            if (appIconOverrides.containsKey(app.key)) {
-                add(MenuAction("Reset icon") { onResetIcon(app) })
-            }
-            add(MenuAction("Set icon") { onSetIcon(app) })
         }
+        // The icon is the app's own, pinned or not: the All apps page offers it either way
+        if (appIconOverrides.containsKey(app.key)) {
+            add(MenuAction("Reset icon") { onResetIcon(app) })
+        }
+        add(MenuAction("Set icon") { onSetIcon(app) })
         add(MenuAction("Info") { context.openAppInfo(app) })
         if (context.canUninstall(app)) {
             add(MenuAction("Uninstall") {

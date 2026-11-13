@@ -1173,3 +1173,29 @@ who turned on "Alerts and apps below" and saw nothing had no pointer to the Home
 - Turning **Alerts and apps below** off (`ha_bottom_row=false`) removed it from the Assistant tab again
   (screenshot: three cards and nothing under them).
 - Both prefs back where they were: `ha_bottom_row=false`, `home_alerts_row=false`.
+
+## F7 — a pinned app can get a custom icon from the row (2026-11-13)
+
+H7. The row's tile menu put "Set icon"/"Reset icon" inside the *unpinned* branch, so a pinned app's menu
+showed only "Unpin from favourites" — while the All apps page offered Set icon for every app. The two
+menus disagreed, and the only way to give a pinned app an icon from the row was to unpin it first.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `AppRow.kt` | The icon entries moved out of the `if (pinned) … else …`: both branches now offer Pin/Unpin **and** Set icon (with Reset icon when an override exists) |
+
+### Deliberate designs worth keeping
+
+- **A pinned app keeps its identity everywhere.** Pinning changes the row's order, not what an app can be
+  given; the row and the All apps page offer the same menu entries for the same app.
+
+### Verified on the Shield (2026-11-13, 09:52)
+
+Long-press on **Plezy** on the Home row (a pinned app) opened the tile menu, read from the live screen:
+
+`Hide · Unpin from favourites · Set icon · Info · Uninstall · Show hidden apps (5)`
+
+"Set icon" is there on the pinned branch, which is the fix; before it the menu stopped at "Unpin from
+favourites". No icon was set and no app was unpinned.
