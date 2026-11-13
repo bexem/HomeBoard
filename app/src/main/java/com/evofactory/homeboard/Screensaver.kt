@@ -314,17 +314,20 @@ fun ScreensaverStatusDialog(onDismiss: () -> Unit) {
     val hasScreen = remember { context.screensaverScreen() != null }
     val googleTv = remember { context.isGoogleTvSettings() }
     val isOurs = status.chosen == ours
+    // Read-only text with one action: the X every dialog has closes it, and is where the remote
+    // starts — a Close button beside the X was one thing twice
     val close = remember { FocusRequester() }
     TopDialog(
         title = "The TV's screensaver",
         width = 720.dp,
         onDismiss = onDismiss,
-        buttons = listOfNotNull(
+        buttons = listOf(
             DialogButton("TV screensaver settings") {
                 if (context.screensaverScreen() != null) context.openScreensaverSettings() else context.openSystemSettings()
             },
-            DialogButton("Close", primary = true, focus = close, onClick = onDismiss),
         ),
+        closeFocus = close,
+        openFocus = { close },
         contentFocus = { close },
     ) {
         val state = when {

@@ -1764,3 +1764,21 @@ the X or the Done button from the list, unlike every other dialog.
   closes the dialog through Done (the a11y dump after Right still shows the row — the bridge reports a
   stale node; the OK outcome is the proof).
 - Names on screen (Assistant → Top bar and order): Left from the first row lands on the X.
+
+## No Close button beside the X in the screensaver status (2026-11-13)
+
+The audit found the same redundancy just removed from the notification access dialog, one file over:
+`ScreensaverStatusDialog` offered a primary "Close" button next to the X every dialog already has —
+two controls for one action.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `Screensaver.kt` | The "Close" button is gone; "TV screensaver settings" stays as the one action, and the remote starts on the X, like the notification access dialog |
+
+### Verified on the Shield (2026-11-13, 18:10)
+
+Launcher → Screensaver → The TV's choice: header holds the action button and the X only, focus ring on
+the X when it opens, the status text with the two ADB commands below. (`screensaver_show_progress`
+checked untouched after a stray OK landed on its toggle row: still true.)
