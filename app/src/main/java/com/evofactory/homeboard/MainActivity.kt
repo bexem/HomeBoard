@@ -191,6 +191,7 @@ class MainActivity : ComponentActivity() {
     private var continueWatching by mutableStateOf(true)
     private var appRowWrap by mutableStateOf(true)
     private var appRowCentre by mutableStateOf(false)
+    private var camerasAlertsRow by mutableStateOf(true)
     private var allAppsTile by mutableStateOf(true)
     private var allAppsLines by mutableStateOf(ALL_APPS_LINES_DEFAULT)
     private var allAppsVertical by mutableStateOf(false)
@@ -245,6 +246,7 @@ class MainActivity : ComponentActivity() {
         continueWatching = prefs.continueWatching
         appRowWrap = prefs.appRowWrap
         appRowCentre = prefs.appRowCentre
+        camerasAlertsRow = prefs.camerasAlertsRow
         allAppsTile = prefs.allAppsTile
         allAppsLines = prefs.allAppsLines
         allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
@@ -407,7 +409,8 @@ class MainActivity : ComponentActivity() {
                     var alertsRowShown by remember { mutableStateOf(false) }
                     // Each tab's own switch is its gate: the Cameras tab always shows the strip, the Assistant
                     // tab has "Alerts and apps below", and Home's row switch stays about Home
-                    val alertsRowAllowed = tab == HomeTab.Cameras || tab == HomeTab.Assistant || homeAlertsRow
+                    val alertsRowAllowed = tab == HomeTab.Assistant || homeAlertsRow ||
+                        (tab == HomeTab.Cameras && camerasAlertsRow)
                     val alertsRowFeed = frigateFeed?.takeIf { tab != HomeTab.Alerts && bottomRow && alertsRowAllowed }
                     val hasAlertsRow = alertsRowFeed != null && alertsRowFeed.rowAlerts.isNotEmpty()
                     LaunchedEffect(hasAlertsRow) { if (!hasAlertsRow) alertsRowShown = false }
@@ -1169,6 +1172,7 @@ class MainActivity : ComponentActivity() {
                                 continueWatching = prefs.continueWatching
                                 appRowWrap = prefs.appRowWrap
                                 appRowCentre = prefs.appRowCentre
+                                camerasAlertsRow = prefs.camerasAlertsRow
                                 allAppsTile = prefs.allAppsTile
                                 allAppsLines = prefs.allAppsLines
                                 allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
@@ -1280,6 +1284,7 @@ class MainActivity : ComponentActivity() {
             continueWatching = prefs.continueWatching
             appRowWrap = prefs.appRowWrap
             appRowCentre = prefs.appRowCentre
+            camerasAlertsRow = prefs.camerasAlertsRow
             allAppsTile = prefs.allAppsTile
             allAppsLines = prefs.allAppsLines
             allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL

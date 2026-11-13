@@ -252,6 +252,11 @@ class LauncherPrefs(context: Context) {
         set(value) = prefs.edit { putBoolean("continue_watching", value) }
 
     /** Left on the first app goes to the last, and right off the last goes to the first */
+    /** The strip of Frigate events on the Cameras tab; off gives the grid its room */
+    var camerasAlertsRow: Boolean
+        get() = prefs.getBoolean("cameras_alerts_row", true)
+        set(value) = prefs.edit { putBoolean("cameras_alerts_row", value) }
+
     /** Tiles in the middle when the row does not reach the screen's edge */
     var appRowCentre: Boolean
         get() = prefs.getBoolean("app_row_centre", false)

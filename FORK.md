@@ -1544,3 +1544,37 @@ edge."
 - **Up from a centred tile** goes to the camera/panel (focus dump `[249,176]…`), the same as with the row
   left-aligned — the first attempt sent it to the tab bar and is what the index mapping fixes.
 - Left as **on**, so Ema sees it; one press turns it off.
+
+## The Cameras tab can lose its strip, and a grid that fits uses the width (2026-11-13)
+
+Ema: "We should be able to hide the alerts row on the camera tab and use the space to make the grid bigger.
+We might also (independently) be able to use the space until the edges if not displaying enough cameras to
+trigger a scroll, lateral or up/down."
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | `cameras_alerts_row` (new key, default **true** — today's behaviour until asked for) |
+| `SettingsSchema.kt` | Cameras → Grid → **Alert strip on this tab**: "The strip of Frigate events under the grid; off gives the grid that room" |
+| `MainActivity.kt` | `alertsRowAllowed` becomes `tab == Assistant \|\| homeAlertsRow \|\| (tab == Cameras && camerasAlertsRow)` — the strip and the No-alerts tile follow it, the app row does not. State read at start and in both re-read blocks |
+| `Cameras.kt` | `TwoRowGrid` gains `useTheWidth` (the camera grid asks for it, the alerts strip does not): when the columns needed fit the screen, the cells are sized to the width instead of by the height's 16:9, and the block is centred when the height is what binds. The scroll window moves with the cells |
+
+### Deliberate designs worth keeping
+
+- **A tab's strip is that tab's switch.** Cameras had no say before (D3: "always kept on Cameras"); this is
+  the same shape as the Assistant tab's switch (F6), and the default keeps a TV that never presses it
+  exactly as it was.
+- **The grid grows by itself.** The strip and the grid share one column, so hiding the strip gives the grid
+  the room with no new sizing code: `weight(1f)` was already there.
+- **Never a cropped picture.** A fitted grid widens to the screen but cannot exceed the 16:9 height cap, so
+  tiles stay the shape the cameras send and the leftover splits to both edges.
+
+### Verified on the Shield (2026-11-13, 15:40–15:42)
+
+- Cameras tab with the strip on: unchanged (grid 3 × 2 of 16:9 tiles, six events underneath).
+- OK on **Alert strip on this tab** (`cameras_alerts_row=false`): back on the Cameras tab the strip and the
+  No-alerts tile are gone and the tiles grew from ~590×420 to ~655×468, with the app row in the strip's
+  place (screenshots). No restart.
+- The grid is centred to the width: first tile at x≈101, last ending at x≈1467 of 1568.
+- Left **off**, because that is what he asked for; one press brings the strip back.

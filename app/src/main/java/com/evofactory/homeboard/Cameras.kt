@@ -328,6 +328,7 @@ fun CameraGrid(
     TwoRowGrid(
         cameras,
         key = { it.id },
+        useTheWidth = true,
         onSelect = onSelect,
         modifier = modifier,
         selectKey = selectCamera,
@@ -490,6 +491,9 @@ fun <T> TwoRowGrid(
     onSelected: () -> Unit = {},
     // The selection moved to this item
     onFocus: (T) -> Unit = {},
+    // A grid that fits uses the whole width instead of the height's 16:9 width, and centres when the
+    // height is what binds (the camera grid). Off for a strip, which has its own shape.
+    useTheWidth: Boolean = false,
     tile: @Composable (T) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
@@ -511,19 +515,31 @@ fun <T> TwoRowGrid(
         onSelected()
     }
     BoxWithConstraints(modifier = modifier) {
-        val cellHeight = (maxHeight - EdgePadding) / 2
-        val cellWidth = cellHeight * 16f / 9f
-        val column = cellWidth + EdgePadding
-        // Scrolls once the selection would go past either edge of the screen
+        val naturalHeight = (maxHeight - EdgePadding) / 2
+        val naturalWidth = naturalHeight * 16f / 9f
+        // How many columns the items need, and how many the screen holds at the natural size
+        val needed = ((items.size + 1) / 2).coerceAtLeast(1)
+        val column = naturalWidth + EdgePadding
         val fullColumns = ((maxWidth - EdgePadding) / column).toInt().coerceAtLeast(1)
-        val firstPx = with(LocalDensity.current) { EdgePadding.toPx() }
-        val lastPx = with(LocalDensity.current) { (EdgePadding + column * (fullColumns - 1)).toPx() }
+        // A grid that fits spreads across the width; a taller-than-wide cap keeps the 16:9 shape
+        val fitted = useTheWidth && items.isNotEmpty() && needed <= fullColumns
+        val cellWidth = if (fitted) {
+            minOf((maxWidth - EdgePadding * (needed + 1)) / needed, naturalWidth)
+        } else {
+            naturalWidth
+        }
+        val cellHeight = cellWidth * 9f / 16f
+        val contentWidth = cellWidth * needed + EdgePadding * (needed - 1)
+        val side = if (fitted) ((maxWidth - contentWidth) / 2).coerceAtLeast(EdgePadding) else EdgePadding
+        // Scrolls once the selection would go past either edge of the screen
+        val firstPx = with(LocalDensity.current) { side.toPx() }
+        val lastPx = with(LocalDensity.current) { (side + (cellWidth + EdgePadding) * (fullColumns - 1)).toPx() }
         CompositionLocalProvider(LocalBringIntoViewSpec provides remember(firstPx, lastPx) { scrollOutsideOf(firstPx, lastPx) }) {
             LazyHorizontalGrid(
                 state = gridState,
                 rows = GridCells.Fixed(2),
                 modifier = Modifier.focusRestorer(),
-                contentPadding = PaddingValues(horizontal = EdgePadding),
+                contentPadding = PaddingValues(horizontal = side),
                 horizontalArrangement = Arrangement.spacedBy(EdgePadding),
                 verticalArrangement = Arrangement.spacedBy(EdgePadding),
             ) {

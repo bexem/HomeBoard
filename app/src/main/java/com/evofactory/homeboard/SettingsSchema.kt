@@ -587,6 +587,14 @@ val AllSettings: List<SettingDef> = listOf(
         "The addresses, their order and shape, and how they play in the grid",
         SettingAction.OpenCameras,
     ),
+    toggle(
+        "cameras_alerts_row",
+        SettingSection.Cameras,
+        "Grid",
+        "Alert strip on this tab",
+        "The strip of Frigate events under the grid; off gives the grid that room",
+        LauncherPrefs::camerasAlertsRow,
+    ),
     choice(
         "camera_source",
         SettingSection.Cameras,
