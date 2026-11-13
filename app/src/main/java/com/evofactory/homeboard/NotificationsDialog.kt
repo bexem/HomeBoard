@@ -58,12 +58,19 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
         // Room for an app name, a title and two lines of text
         width = 720.dp,
         onDismiss = onDismiss,
-        buttons = if (enabled && entries.any { it.clearable }) {
+        // Like the drawer this stands in for: Clear all is always offered with a list, and what the
+        // TV refuses to dismiss (its ongoing services) is why some rows survive it
+        buttons = if (enabled && entries.isNotEmpty()) {
             listOf(DialogButton("Clear all") { Notifications.clearAll() })
         } else {
             emptyList()
         },
         contentFocus = { first },
+        hint = if (enabled && entries.isNotEmpty() && entries.none { it.clearable }) {
+            "None of these can be dismissed: they belong to running services."
+        } else {
+            null
+        },
     ) {
         when {
             !enabled -> NotificationAccessOff()
@@ -191,12 +198,14 @@ private fun NotificationAccessOff() {
  */
 @Composable
 fun NotificationAccessDialog(onDismiss: () -> Unit) {
+    // Read-only text: the X every dialog has is the whole top row, and where the remote starts
     val close = remember { FocusRequester() }
     TopDialog(
         title = "Notification access",
         width = 720.dp,
         onDismiss = onDismiss,
-        buttons = listOf(DialogButton("Close", primary = true, focus = close, onClick = onDismiss)),
+        closeFocus = close,
+        openFocus = { close },
         contentFocus = { close },
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {

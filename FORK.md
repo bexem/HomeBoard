@@ -1706,3 +1706,39 @@ there was no way to put the widgets on the left.
 - **Widgets are on the: The left** (gap between): the calendar at the left edge, the camera at the right
   edge, the slack between them — the mirror of his first screenshot (screenshot).
 - Restored: `camera_side=left`, `camera_gap=between`, `camera_widgets_side=right`.
+
+## The badge's panel was the shared dialog with a broken header (2026-11-13)
+
+Ema's report: the counter near the clock set to the TV's notifications opens a dialog that "is
+different", has no Clear all, and a botched X. All three were real, none was a second popup: every
+popup in the fork is `TopDialog` (the only raw `Dialog` windows are the fullscreen camera and alert
+clip players, and the settings page is a full-screen page). What he saw:
+
+1. **The X sat ~230 dp short of the right edge** in any dialog without tabs. The header's title had
+   `weight(1f, fill = false)` *beside* a `Spacer(weight(1f))`; the two weights split the row's slack,
+   and the title's unused half landed to the right of the X. It was worst in the notifications
+   dialog, the one popup whose header has no other buttons, so it read as a cheap one-off. Fix: the
+   title (and the title+subtitle column) now takes `weight(1f)` — the whole row — and the spacer
+   survives only in the tabs branch, where it was always correct.
+2. **No Clear all**: it only appeared when some notification was clearable, and the Shield's six
+   notifications are all ongoing services (tvQuickActions, Shield SMB, Dolby, the remote service),
+   so the button never showed. It now shows whenever there is a list — drawer semantics — and when
+   nothing can be dismissed the dialog's hint line says why: "None of these can be dismissed: they
+   belong to running services."
+3. **`NotificationAccessDialog` had a Close button next to the X**: two ways to do one thing. The
+   button is gone; the X is the top row and where the remote starts.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `TopDialog.kt` | Header: title/subtitle take the row (`weight(1f)`), the spacer stays only with tabs |
+| `NotificationsDialog.kt` | Clear all with any list; the ongoing-only hint; access dialog's Close removed |
+
+### Verified on the Shield (2026-11-13, 17:07–17:14)
+
+- Badge → Notifications: title left, **Clear all** then X flush right (~120 px from the dialog
+  edge), six rows, first focused, hint line printed.
+- Network status (the subtitle branch): three buttons + X flush right, title and subtitle one line
+  each.
+- `assembleDebug` green; tree committed clean.

@@ -237,9 +237,13 @@ fun TopDialog(
                                     )
                                 }
                             }
+                            // The tabs take no width of their own accord: this pushes what follows
+                            // to the right edge
+                            Spacer(Modifier.weight(1f))
                         } else if (subtitle != null) {
-                            // One line each: a long title used to wrap and push the buttons out of the row
-                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                            // Takes the row's width, so the buttons sit flush right; one line each: a
+                            // long title used to wrap and push the buttons out of the row
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     subtitle,
@@ -250,15 +254,16 @@ fun TopDialog(
                                 )
                             }
                         } else {
+                            // The row's width too, for the same flush right: a weighted title beside a
+                            // weighted spacer split the slack, leaving half of it past the X
                             Text(
                                 title,
                                 style = MaterialTheme.typography.titleMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false),
+                                modifier = Modifier.weight(1f),
                             )
                         }
-                        Spacer(Modifier.weight(1f))
                         if (info != null) {
                             Text(info, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
