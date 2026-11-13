@@ -1018,3 +1018,36 @@ Audit finding #5: `HomeOption` (ListItem + the library `Switch`), `CameraDialog`
 - The camera editor (Camera list → **Add camera**) draws its four toggles where they were — *Stretch to
   16:9* and *Use audio track* beside each stream's title — with the same mark, so the side-by-side rows
   kept their layout. Nothing was saved and no camera was added (`cameras` still holds the same six).
+
+## F1 — the camera's shape is remembered, and a chosen shape sticks (2026-11-13)
+
+H1. Two bugs behind one feature, both in the ledger's own camera-shape story: `camerasToJson` wrote
+`aspect` while `camerasFromJson` never read it, so every camera started at 16:9 and a manual choice died
+on restart and on export→import; and `onAspect` overwrote any shape with whatever the stream reported.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `Cameras.kt` | `camerasFromJson` reads `aspect` back (`optDouble("aspect", 0.0)`, 0 = Auto) |
+| `MainActivity.kt` | `onAspect` learns only while the stored value is Auto: `known <= 0f && reported > 0f` |
+
+### Deliberate designs worth keeping
+
+- **Auto is the learning state, not a third shape.** A chosen 16:9, 4:3, 1:1, 5:4 or 21:9 is the owner's
+  and survives every stream start; cycling back round to Auto (aspect 0) hands it back to the stream. No
+  new key, no format change: `aspect` was always in the cameras JSON, and the export goes through the same
+  reader.
+- **Learning resumes at the next stream start, not mid-stream.** Choosing Auto does not restart the player,
+  so the box keeps its current shape until the camera starts again (a restart or a switch); that is the
+  honest cost of not tearing down a live stream on a settings change.
+
+### Verified on the Shield (2026-11-13, 10:2x–10:3x)
+
+- Camera list → Doorbell's menu read **"Shape: 4:3"**: the stored `aspect=1.3333` is now read back (before
+  this fix it read "Shape: Auto" on every start).
+- Chose **1:1** (a shape the stream does not report), force-stopped the launcher
+  (`am force-stop com.evofactory.homeboard`) and reopened: the Home box was **square** with a live picture
+  on it, and `aspect` was still `1` seconds later — the stream no longer overwrites a chosen shape.
+- Cycled back round to **Auto** (`aspect=0`), force-stopped and reopened: the first frame stored
+  `aspect=1.3333333730697632` again and the box went back to **4:3**, which is the value it started with.

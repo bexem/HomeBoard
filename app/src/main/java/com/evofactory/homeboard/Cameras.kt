@@ -149,6 +149,8 @@ fun camerasFromJson(json: String): List<Camera> {
                 it.optBoolean("subAudio", true),
                 it.optBoolean("stretch", false),
                 it.optBoolean("subStretch", true),
+                // The shape the stream reported, or the one chosen by hand: 0 is Auto, and learns again
+                aspect = it.optDouble("aspect", 0.0).toFloat(),
             )
         }
     }

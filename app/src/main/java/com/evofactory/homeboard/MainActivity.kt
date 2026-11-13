@@ -586,10 +586,11 @@ class MainActivity : ComponentActivity() {
                                                 ha = haServer,
                                                 minimizeStreams = minimizeVideoStreams,
                                                 soundEnabled = cameraSound == CAMERA_SOUND_FULLSCREEN,
-                                                // Learned once per camera, then remembered for the next time
+                                                // Learned for a camera whose shape is Auto; a chosen shape is the
+                                                // owner's, so the stream must not overwrite it
                                                 onAspect = { reported ->
                                                     val known = cameras.find { it.id == camera.id }?.aspect ?: 0f
-                                                    if (kotlin.math.abs(reported - known) > 0.01f) {
+                                                    if (known <= 0f && reported > 0f) {
                                                         saveCameras(
                                                             cameras.map {
                                                                 if (it.id == camera.id) it.copy(aspect = reported) else it
