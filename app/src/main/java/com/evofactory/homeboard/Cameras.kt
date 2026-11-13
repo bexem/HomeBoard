@@ -762,19 +762,19 @@ private fun CameraAdvancedSettings(
         listOf("H.265" to MimeTypes.VIDEO_H265, "H.264" to MimeTypes.VIDEO_H264)
             .joinToString(" · ") { (label, type) -> "$label: ${maxDecoders(type) ?: "none"}" }
     }
-    HomeOption(
+    SwitchRow(
         title = "Show substreams on the Cameras tab",
+        on = playSubstreams,
+        onToggle = { onPlaySubstreamsChange(!playSubstreams) },
+        modifier = modifier.padding(top = 8.dp).fillMaxWidth(),
         description = "Plays them live, as many as this TV can decode at once. Off: still pictures only.",
-        checked = playSubstreams,
-        onClick = { onPlaySubstreamsChange(!playSubstreams) },
-        modifier = modifier.padding(top = 8.dp),
     )
-    HomeOption(
+    SwitchRow(
         title = "Minimize simultaneous video streams",
+        on = minimizeStreams,
+        onToggle = { onMinimizeStreamsChange(!minimizeStreams) },
+        modifier = lastModifier.fillMaxWidth(),
         description = "For older TVs",
-        checked = minimizeStreams,
-        onClick = { onMinimizeStreamsChange(!minimizeStreams) },
-        modifier = lastModifier,
     )
     Text(
         "Maximum decoders on this TV: $limits",

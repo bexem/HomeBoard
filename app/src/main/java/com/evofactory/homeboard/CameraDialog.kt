@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,17 +17,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
-import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 
 /**
@@ -140,7 +135,7 @@ fun CameraDialog(
                 .focusProperties { down = fields.requester("stretch") },
         )
         StreamTitle("Main Stream") {
-            SwitchToggle(
+            SwitchRow(
                 "Stretch to 16:9",
                 stretch,
                 { stretch = !stretch },
@@ -149,7 +144,7 @@ fun CameraDialog(
                     down = urlField
                 },
             )
-            SwitchToggle(
+            SwitchRow(
                 "Use audio track",
                 useAudio,
                 { useAudio = !useAudio },
@@ -176,7 +171,7 @@ fun CameraDialog(
                 },
         )
         StreamTitle("Sub Stream (for small previews)") {
-            SwitchToggle(
+            SwitchRow(
                 "Stretch to 16:9",
                 stretchSubstream,
                 { stretchSubstream = !stretchSubstream },
@@ -185,7 +180,7 @@ fun CameraDialog(
                     down = substreamField
                 },
             )
-            SwitchToggle(
+            SwitchRow(
                 "Use audio track",
                 useSubstreamAudio,
                 { useSubstreamAudio = !useSubstreamAudio },
@@ -226,33 +221,6 @@ private fun StreamTitle(title: String, switches: @Composable () -> Unit) {
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
         switches()
-    }
-}
-
-/** A [label] and a small switch, which OK turns on or off */
-@Composable
-private fun SwitchToggle(label: String, on: Boolean, onToggle: () -> Unit, modifier: Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        onClick = onToggle,
-        modifier = modifier,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            contentColor = colors.onSurfaceVariant,
-            focusedContainerColor = colors.onSurface,
-            focusedContentColor = colors.inverseOnSurface,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            SwitchMark(on, LocalContentColor.current)
-        }
     }
 }
 

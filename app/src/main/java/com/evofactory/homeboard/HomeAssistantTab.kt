@@ -27,12 +27,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -1225,28 +1223,6 @@ private fun Modifier.widenBy(by: Dp) = layout { measurable, constraints ->
         constraints.copy(minWidth = constraints.maxWidth + extra * 2, maxWidth = constraints.maxWidth + extra * 2),
     )
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
-}
-
-/**
- * A small switch: filled in [color] with a [knob] on the right when [on], an outline with the knob
- * on the left when off. The knob is the row's background, so it stands out on the fill: light on a
- * selected row, whose text is dark.
- */
-@Composable
-internal fun SwitchMark(on: Boolean, color: Color) {
-    Box(
-        modifier = Modifier
-            .size(width = 36.dp, height = 20.dp)
-            .then(if (on) Modifier.background(SwitchOn, CircleShape) else Modifier.border(2.dp, color.copy(alpha = 0.6f), CircleShape))
-            .padding(3.dp),
-        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
-    ) {
-        Box(
-            Modifier
-                .size(14.dp)
-                .background(if (on) SwitchKnob else color.copy(alpha = 0.6f), CircleShape),
-        )
-    }
 }
 
 /** A scene, script or button, as a button the width of its card; greyed out until connected, and while one runs */

@@ -367,12 +367,12 @@ fun ScreensaverSettings(
             ) { Text(camera.name) }
         }
     }
-    HomeOption(
+    SwitchRow(
         title = "Display connection progress",
+        on = showProgress,
+        onToggle = { onShowProgressChange(!showProgress) },
+        modifier = progressModifier.padding(top = 8.dp).fillMaxWidth(),
         description = "While a camera connects. Off: only a problem shows, e.g. a camera that doesn't answer.",
-        checked = showProgress,
-        onClick = { onShowProgressChange(!showProgress) },
-        modifier = progressModifier.padding(top = 8.dp),
     )
     MenuDivider()
 

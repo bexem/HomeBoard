@@ -31,17 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
-import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
-import androidx.tv.material3.Switch
-import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -107,32 +103,6 @@ fun HomeOverrideConsentDialog(onAccept: () -> Unit, onDecline: () -> Unit) {
 fun Context.restartApp() {
     startActivity(Intent.makeRestartActivityTask(ComponentName(this, MainActivity::class.java)))
     Process.killProcess(Process.myPid())
-}
-
-@Composable
-fun HomeOption(title: String, description: String, checked: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    ListItem(
-        selected = false,
-        onClick = onClick,
-        headlineContent = { Text(title) },
-        supportingContent = { Text(description) },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = null,
-                // Neutral: reads on the dialog and on the light background of the selected row
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = MarkOn,
-                    checkedBorderColor = MarkOn,
-                    uncheckedThumbColor = MarkOff,
-                    uncheckedTrackColor = Color.Transparent,
-                    uncheckedBorderColor = MarkOff,
-                ),
-            )
-        },
-        modifier = modifier,
-    )
 }
 
 private const val HELPER_START_GRACE_MS = 3_000L

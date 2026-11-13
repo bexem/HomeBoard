@@ -921,3 +921,40 @@ were the same dialog three times, and only the calendar's OK said what it did.
   chooses more."**; including it again and moving it up restored `ha_camera_entities` exactly.
 - **Favourite apps**: pinned first with "Position 1 of 4", OK offered *Move down (Position 2)* / *Unpin
   it*; right moved Plezy to slot 2 and left put it back, `favourite_apps` byte-identical to the start.
+
+## C5 — one toggle row, one switch mark (2026-11-13)
+
+Audit finding #5: `HomeOption` (ListItem + the library `Switch`), `CameraDialog`'s private `SwitchToggle`
+(Surface + a drawn mark) and the mark itself living in `HomeAssistantTab` were three answers to one row.
+
+### New files
+
+| File | What it is |
+|---|---|
+| `Switches.kt` | `SwitchMark(on, color)` — moved verbatim from `HomeAssistantTab` — and `SwitchRow(title, on, onToggle, modifier, description = null)`: the camera dialog's compact row (transparent surface, `onSurface`/`inverseOnSurface` when focused) with an optional second line under the title |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherSettingsDialog.kt` | `HomeOption` deleted with its library `Switch`; nothing of it is left in the file |
+| `CameraDialog.kt` | Its private `SwitchToggle` deleted; four call sites use `SwitchRow`, `StreamTitle` untouched so the two pairs still sit beside their stream's title |
+| `HomeAssistantTab.kt` | The local `SwitchMark` deleted; `ToggleRow` uses the shared one |
+| `Cameras.kt`, `Screensaver.kt` | The three `HomeOption` rows are `SwitchRow` and pass `fillMaxWidth()` themselves, since the row no longer fills on its own |
+
+### Deliberate designs worth keeping
+
+- **The row doesn't decide its own width.** `SwitchRow` renders at the caller's modifier: full width where
+  it is a settings row, compact where two sit side by side in the camera dialog (that layout is unchanged).
+- **One mark, one meaning**: filled blue with the knob right when on, an outline with the knob left when
+  off, drawn in the row's own content colour so it stays legible on the light focused row.
+
+### Verified on the Shield (2026-11-13, 10:3x)
+
+- Cameras → **Camera list → Advanced**: both rows draw the shared mark ("Show substreams on the Cameras
+  tab" on, "Minimize simultaneous video streams" off); OK on each flipped it and the focused row stayed
+  legible (light row, dark text, mark redrawn in the inverse colour). Prefs moved `camera_grid_live`
+  true→false→true and `minimize_video_streams` false→true→false: Ema's values are back.
+- The camera editor (Camera list → **Add camera**) draws its four toggles where they were — *Stretch to
+  16:9* and *Use audio track* beside each stream's title — with the same mark, so the side-by-side rows
+  kept their layout. Nothing was saved and no camera was added (`cameras` still holds the same six).
