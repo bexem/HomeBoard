@@ -22,23 +22,32 @@ import androidx.tv.material3.Text
  * the typing happens. Changing it ends the saved login, which belonged to the old address.
  */
 @Composable
-fun HaAddressDialog(prefs: LauncherPrefs, onDismiss: () -> Unit) {
+fun HaAddressDialog(prefs: LauncherPrefs, onSaved: (String) -> Unit, onDismiss: () -> Unit) {
     var url by remember { mutableStateOf(prefs.haUrl) }
     val field = remember { FocusRequester() }
     val normalised = normalizeHaUrl(url)
+
+    // One save path, so the button and the remote's Done cannot drift apart
+    fun save() {
+        val address = normalised ?: return
+        // Saving the same address again is not a change: it must not end the login that belongs to it
+        if (address == prefs.haUrl) {
+            onDismiss()
+            return
+        }
+        prefs.haUrl = address
+        // The login belonged to the old address
+        prefs.haToken = ""
+        prefs.haRefreshToken = ""
+        onSaved(address)
+        onDismiss()
+    }
     TopDialog(
         title = "Home Assistant address",
         onDismiss = onDismiss,
         buttons = listOf(
             DialogButton("Cancel", onClick = onDismiss),
-            DialogButton("Save", primary = true, enabled = normalised != null && normalised != prefs.haUrl) {
-                val address = normalised ?: return@DialogButton
-                prefs.haUrl = address
-                // The login belonged to the old address
-                prefs.haToken = ""
-                prefs.haRefreshToken = ""
-                onDismiss()
-            },
+            DialogButton("Save", primary = true, enabled = normalised != null && normalised != prefs.haUrl) { save() },
         ),
         contentFocus = { field },
     ) {
@@ -48,7 +57,7 @@ fun HaAddressDialog(prefs: LauncherPrefs, onDismiss: () -> Unit) {
             placeholder = "http://192.168.1.20:8123",
             keyboardType = KeyboardType.Uri,
             imeAction = ImeAction.Done,
-            onImeAction = { normalised?.let { prefs.haUrl = it; prefs.haToken = ""; prefs.haRefreshToken = ""; onDismiss() } },
+            onImeAction = { save() },
             modifier = Modifier.fillMaxWidth().padding(12.dp).focusRequester(field),
         )
         Text(

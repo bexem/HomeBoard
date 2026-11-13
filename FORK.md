@@ -1082,3 +1082,41 @@ setup also waited.
   not itself proof — the re-layout is.
 - Both switched off again: `Player 77c3 started …, /doorbell` at 10:41:16 and the picture went back.
   `shuffle_camera`, `shuffle_actions`, `shuffle_cards`, `shuffle_sides` all read `false`, as Ema has them.
+
+## F4 — changing the Home Assistant address changes what is running (2026-11-13)
+
+H4. `HaAddressDialog` wrote `prefs.haUrl` and cleared the tokens, but `MainActivity.haServer` — the state the
+connection, the panel and the *Log in* dialog read — kept the old URL. Until a restart the panel talked to
+the old server while the rows already read "Not signed in", and *Log in* was pre-filled with the address
+that no longer existed in prefs.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HaAddressDialog.kt` | `onSaved: (String) -> Unit`; the Save button and the remote's Done now go through one local `save()`, so they cannot drift apart |
+| `MainActivity.kt` | Passes `onSaved` doing the big dialog's server half: revoke the old login (only if it held a refresh token), `haServer = HaServer(address)`, `settingsRevision++` |
+
+### Deliberate designs worth keeping
+
+- **Saving the address you already have is not a change.** `save()` returns early when the normalised
+  address equals the stored one: the remote's Done on an untouched field used to clear `ha_token` and
+  `ha_refresh_token` and end the TV's login for nothing.
+- **The revoke is conditional**: a long-lived token has no refresh token to revoke, so nothing is called
+  into the old server on the way out.
+
+### Verified on the Shield (2026-11-13, 10:44–10:52)
+
+- Done on the untouched field: the dialog closed and the login survived (`ha_token` still present, the row
+  still "Signed in"). Before this, that press cleared it.
+- Address → `<ha-host>:8124` (the same server, a dead port) → the rows read the new address and "Not
+  signed in", and the Home tab's whole panel emptied at once — the *running* connection had moved to the
+  dead port with no restart. The old build would have kept drawing the old server's calendar until a
+  restart.
+- Address back to `<ha-host>:8123`, then *Log in* opened **pre-filled with that address and no login**
+  (screenshot), the token login reconnected, Save wrote it, and the Home tab's calendar and sensors came
+  back. Prefs afterwards: `ha_url=http://<ha-host>:8123`, `ha_token` the same long-lived token as
+  before.
+- One drift to record: showing the shuffled camera (F2) taught `cameras` the Living Room's own shape
+  (`aspect=1.7777…`), which the baseline had as 0 (Auto). Same picture, and it is the learning F1 puts
+  back; left as learned rather than reset through five more remote presses.

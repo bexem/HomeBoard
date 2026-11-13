@@ -927,7 +927,16 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     if (haAddressOpen) {
-                        HaAddressDialog(prefs = prefs, onDismiss = { haAddressOpen = false })
+                        HaAddressDialog(
+                            prefs = prefs,
+                            // The running server, not just the stored one: the panel and Log in read this
+                            onSaved = { address ->
+                                if (haServer.refreshToken.isNotEmpty()) revokeHaLogin(haServer)
+                                haServer = HaServer(address)
+                                settingsRevision++
+                            },
+                            onDismiss = { haAddressOpen = false },
+                        )
                     }
                     if (entityNamesOpen) {
                         EntityNamesDialog(
