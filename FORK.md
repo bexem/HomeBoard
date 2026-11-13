@@ -1578,3 +1578,31 @@ trigger a scroll, lateral or up/down."
   place (screenshots). No restart.
 - The grid is centred to the width: first tile at x≈101, last ending at x≈1467 of 1568.
 - Left **off**, because that is what he asked for; one press brings the strip back.
+
+## "Wider widgets" is graded (2026-11-13)
+
+Ema: "'Wider widgets' is nice but I think you gave too much room to the widgets, perhaps a configurable,
+'double the size' or 'half extra' type of thing?"
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | Two more `camera_side` values: `half` and `double`, added to `CAMERA_SIDES` (M12's `left`/`centre`/`wider` untouched, so an old value means what it always did) |
+| `SettingsSchema.kt` | The row now offers five: *Leave the gap*, *Centre the picture*, **Widgets: half again as wide**, **Widgets: twice as wide**, **Widgets: the rest of the width** |
+| `MainActivity.kt` | One `panelWidth` for the side layout: the panel's own width, ×1.5, or ×2 — capped at 60 % of the width so the camera always keeps a picture — and the camera's room is computed from it. `wider` still means the rest |
+
+### Deliberate designs worth keeping
+
+- **Same key, more values.** `camera_side` is not renamed and every value it had still means what it did, so
+  an export from before this reads exactly as before; an old build reading `half`/`double` falls back to
+  `left` through the existing `takeIf { it in CAMERA_SIDES }` guard.
+- **The camera always keeps its picture.** The panel is capped, so no choice can squeeze the camera out of
+  its own slot.
+
+### Verified on the Shield (2026-11-13, 15:43–15:46)
+
+- Home → **Space beside the camera** lists all five with *Centre the picture ✓* on Ema's value.
+- Choosing **Widgets: twice as wide** (`camera_side=double`) made the calendar panel ~846 px wide against
+  the camera's 605, from 260 dp before (screenshot), with no restart.
+- Restored to **Centre the picture** (`camera_side=centre`), the value found on the TV.

@@ -686,7 +686,13 @@ class MainActivity : ComponentActivity() {
                                     // The slot is the camera's own shape, so a 4:3 picture leaves a gap by
                                     // design; what happens to that gap is a setting
                                     val cameraShape = camera?.aspect?.takeIf { it > 0f } ?: (16f / 9f)
-                                    val roomForCamera = if (sideContent) maxWidth - SidePanelWidth - EdgePadding else maxWidth
+                                    // How wide the widgets are: their own width, a step wider, or the rest
+                                    val panelWidth = when (cameraSide) {
+                                        CAMERA_SIDE_HALF -> SidePanelWidth * 1.5f
+                                        CAMERA_SIDE_DOUBLE -> SidePanelWidth * 2
+                                        else -> SidePanelWidth
+                                    }.coerceAtMost((maxWidth - EdgePadding * 2) * 0.6f)
+                                    val roomForCamera = if (sideContent) maxWidth - panelWidth - EdgePadding else maxWidth
                                     val cameraWidth = minOf(maxHeight * cameraShape, roomForCamera)
                                     // What the choice does, in one place: "wider widgets" gives the panel
                                     // the rest of the width; the other two keep it at its own width and
@@ -721,14 +727,14 @@ class MainActivity : ComponentActivity() {
                                                 onSetUp = { haDialogTab = HaDialogTab.Home },
                                                 inset = 0.dp,
                                                 modifier = Modifier
-                                                    .then(if (gapKept) Modifier.width(SidePanelWidth) else Modifier.weight(1f))
+                                                    .then(if (gapKept) Modifier.width(panelWidth) else Modifier.weight(1f))
                                                     .fillMaxHeight()
                                                     .focusRequester(haSensorsFocus),
                                             )
                                         } else if (sideContent) {
                                             Box(
                                                 modifier = Modifier
-                                                    .then(if (gapKept) Modifier.width(SidePanelWidth) else Modifier.weight(1f))
+                                                    .then(if (gapKept) Modifier.width(panelWidth) else Modifier.weight(1f))
                                                     .fillMaxHeight(),
                                             ) {
                                                 HomeAssistantPanel(

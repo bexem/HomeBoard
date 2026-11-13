@@ -291,7 +291,8 @@ class LauncherPrefs(context: Context) {
     /**
      * What fills the Home tab beside the camera when the picture is narrower than its slot:
      * [CAMERA_SIDE_LEFT] leaves the gap, [CAMERA_SIDE_CENTRE] centres the picture,
-     * [CAMERA_SIDE_WIDER] gives the gap to the widgets.
+     * [CAMERA_SIDE_HALF] and [CAMERA_SIDE_DOUBLE] widen the widgets by that much, and
+     * [CAMERA_SIDE_WIDER] gives them the rest.
      */
     var cameraSide: String
         get() = prefs.getString("camera_side", CAMERA_SIDE_LEFT).takeIf { it in CAMERA_SIDES } ?: CAMERA_SIDE_LEFT
@@ -581,10 +582,12 @@ val CALENDAR_REFRESH = 5..120
 const val CAMERA_SIDE_LEFT = "left"
 const val CAMERA_SIDE_CENTRE = "centre"
 const val CAMERA_SIDE_WIDER = "wider"
+const val CAMERA_SIDE_HALF = "half"
+const val CAMERA_SIDE_DOUBLE = "double"
 
 const val BADGE_SOURCE_FRIGATE = "frigate"
 const val BADGE_SOURCE_NOTIFICATIONS = "notifications"
-val CAMERA_SIDES = listOf(CAMERA_SIDE_LEFT, CAMERA_SIDE_CENTRE, CAMERA_SIDE_WIDER)
+val CAMERA_SIDES = listOf(CAMERA_SIDE_LEFT, CAMERA_SIDE_CENTRE, CAMERA_SIDE_HALF, CAMERA_SIDE_DOUBLE, CAMERA_SIDE_WIDER)
 
 val SHUFFLE_HOURS = 0..24
 /** After this long away, coming back to the launcher counts as a new session */
