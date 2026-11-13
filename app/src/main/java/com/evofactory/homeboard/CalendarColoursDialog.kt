@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
@@ -97,14 +98,13 @@ fun CalendarColoursDialog(
         }
         LaunchedEffect(chosen) { runCatching { (rows.currentOrNull(chosen) ?: done).requestFocus() } }
         menuFor?.let { id ->
-            // The same picker the background uses (C3): dot, name, "In use", Done
+            // The launcher's one colour picker, the same one the background uses
             val hex = calendarColour(picked, id) ?: CalendarPalette.getOrNull(chosen.indexOf(id))?.hex()
-            val current = CalendarPalette.firstOrNull { it.hex().equals(hex, true) } ?: CalendarPalette.first()
+            val current = colourOf(hex).toArgb()
             ColourPickerDialog(
                 title = names[id] ?: id,
                 subtitle = "The bar beside this calendar's events; Home Assistant keeps no colour for a calendar, so this is the launcher's",
-                palette = CalendarPalette,
-                current = current.argb,
+                current = current,
                 onPick = { argb ->
                     choose(id, ColourEntry("", argb).hex())
                     menuFor = null

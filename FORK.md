@@ -1644,3 +1644,34 @@ so it is four rows now.
   **HomeBoard Cameras** listed. Nothing was chosen there and the TV's setting was left as it was.
 - Not opened on the TV: the cameras picker itself (the row and its summary were seen; the picker is C4's,
   with the no-order flag). It is the first thing to press next.
+
+## The one colour picker is a grid, and the widget widths are shares of the row (2026-11-13)
+
+Two of Ema's follow-ups on the same session.
+
+### The colour picker, again (and for the last time)
+
+A list of named colours is still a second kind of picker; he wants the one Android itself shows. `ColourPickerDialog` is now a **grid**: greys in the first column, then a hue every 30° across, eight shades down from the palest to near black — 13 × 8 swatches the remote walks with the arrows — with the colour in use as a dot beside the title, the last six picked underneath ("Recently used"), and Done. Both places that choose a colour open it: Background → Colour and Calendar → Event colours (whose rows are doors onto it). The named palettes are gone from the dialog: `CalendarPalette` still assigns the *default* colour of a calendar by position, which is a different job.
+
+- New key `recent_colours` (local, never exported).
+- `ColourPickerDialog(title, subtitle, current, onPick, onDismiss)` — no palette parameter at all, so no caller can have its own.
+
+### The widths, measured
+
+The first attempt scaled the panel's own 260 dp (`×1.5`, `×2`), which is not what he described and, worse, left the slack on the outside of the pair. Now:
+
+| Value | What the panel gets |
+|---|---|
+| *Leave the gap* / *Centre the picture* | 260 dp (28.5 % of the 912 dp row) — the default |
+| *Widgets: two fifths of the width* | 0.43 × the row (6 of 14) |
+| *Widgets: half the width* | 0.5 × the row (7 of 7) |
+| *Widgets: the rest of the width* | everything the camera leaves |
+
+and the slack is always placed **between** the picture and the panel (`gapSlot`), never outside them, so widening the widgets cannot push anything off the screen's edge.
+
+### Verified on the Shield (2026-11-13, 16:16–16:25)
+
+- **The grid**: greys left, hues across, eight shades down, "In use" dot, the remote starting on the current colour (screenshot). It replaced the same dialog the calendar uses; nothing else in the tree draws a colour list.
+- **Two fifths**: camera 16:9 at the left, panel right at 392 dp of the 912 dp row (0.43), the gap between them (screenshot). *Half* is the same path at 0.5. Restored to **Leave the gap**, the value found.
+- **The measurement trap**: three screenshots in a row showed the previous value because a host-side prefs write was being raced by Android's automatic restart of the home app (the M12 pattern). The order that works — write, then force-stop, then start — is what produced the final captures.
+- Also fixed on the way: `TopDialog`'s title and subtitle are one line each with an ellipsis and a weight, so a long title can no longer wrap into the buttons (the overflow he pointed at); if the artefact he photographed was something else, it is the next thing to press.

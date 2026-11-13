@@ -643,8 +643,8 @@ val AllSettings: List<SettingDef> = listOf(
         listOf(
             CAMERA_SIDE_LEFT to "Leave the gap",
             CAMERA_SIDE_CENTRE to "Centre the picture",
-            CAMERA_SIDE_HALF to "Widgets: half again as wide",
-            CAMERA_SIDE_DOUBLE to "Widgets: twice as wide",
+            CAMERA_SIDE_TWO_FIFTHS to "Widgets: two fifths of the width",
+            CAMERA_SIDE_HALF to "Widgets: half the width",
             CAMERA_SIDE_WIDER to "Widgets: the rest of the width",
         ),
     ),

@@ -224,6 +224,11 @@ class LauncherPrefs(context: Context) {
         set(value) = prefs.edit { putInt("screensaver_seconds", value) }
 
     /** Ids of the cameras the screensaver leaves out; new cameras show */
+    /** The last colours picked in the colour picker, newest first, comma-separated: local, not exported */
+    var recentColours: String
+        get() = prefs.getString("recent_colours", "").orEmpty()
+        set(value) = prefs.edit { putString("recent_colours", value) }
+
     /** The same seconds, as the choice value a schema row needs: "15" */
     var screensaverSecondsChoice: String
         get() = screensaverSeconds.toString()
@@ -296,7 +301,7 @@ class LauncherPrefs(context: Context) {
     /**
      * What fills the Home tab beside the camera when the picture is narrower than its slot:
      * [CAMERA_SIDE_LEFT] leaves the gap, [CAMERA_SIDE_CENTRE] centres the picture,
-     * [CAMERA_SIDE_HALF] and [CAMERA_SIDE_DOUBLE] widen the widgets by that much, and
+     * [CAMERA_SIDE_TWO_FIFTHS] and [CAMERA_SIDE_HALF] give the widgets that share of the width, and
      * [CAMERA_SIDE_WIDER] gives them the rest.
      */
     var cameraSide: String
@@ -587,12 +592,12 @@ val CALENDAR_REFRESH = 5..120
 const val CAMERA_SIDE_LEFT = "left"
 const val CAMERA_SIDE_CENTRE = "centre"
 const val CAMERA_SIDE_WIDER = "wider"
+const val CAMERA_SIDE_TWO_FIFTHS = "twofifths"
 const val CAMERA_SIDE_HALF = "half"
-const val CAMERA_SIDE_DOUBLE = "double"
 
 const val BADGE_SOURCE_FRIGATE = "frigate"
 const val BADGE_SOURCE_NOTIFICATIONS = "notifications"
-val CAMERA_SIDES = listOf(CAMERA_SIDE_LEFT, CAMERA_SIDE_CENTRE, CAMERA_SIDE_HALF, CAMERA_SIDE_DOUBLE, CAMERA_SIDE_WIDER)
+val CAMERA_SIDES = listOf(CAMERA_SIDE_LEFT, CAMERA_SIDE_CENTRE, CAMERA_SIDE_TWO_FIFTHS, CAMERA_SIDE_HALF, CAMERA_SIDE_WIDER)
 
 val SHUFFLE_HOURS = 0..24
 /** After this long away, coming back to the launcher counts as a new session */

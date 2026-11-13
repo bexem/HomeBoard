@@ -687,12 +687,14 @@ class MainActivity : ComponentActivity() {
                                     // The slot is the camera's own shape, so a 4:3 picture leaves a gap by
                                     // design; what happens to that gap is a setting
                                     val cameraShape = camera?.aspect?.takeIf { it > 0f } ?: (16f / 9f)
-                                    // How wide the widgets are: their own width, a step wider, or the rest
+                                    // How wide the widgets are: their own width, a share of the row, or the
+                                    // rest. A share is of the row's whole width, so the panel's own edge
+                                    // stays on the screen's edge and only the camera's slot shrinks.
                                     val panelWidth = when (cameraSide) {
-                                        CAMERA_SIDE_HALF -> SidePanelWidth * 1.5f
-                                        CAMERA_SIDE_DOUBLE -> SidePanelWidth * 2
+                                        CAMERA_SIDE_TWO_FIFTHS -> maxWidth * 0.43f
+                                        CAMERA_SIDE_HALF -> maxWidth * 0.5f
                                         else -> SidePanelWidth
-                                    }.coerceAtMost((maxWidth - EdgePadding * 2) * 0.6f)
+                                    }
                                     val roomForCamera = if (sideContent) maxWidth - panelWidth - EdgePadding else maxWidth
                                     val cameraWidth = minOf(maxHeight * cameraShape, roomForCamera)
                                     // What the choice does, in one place: "wider widgets" gives the panel
@@ -712,10 +714,14 @@ class MainActivity : ComponentActivity() {
                                                 else -> CameraBox(cameraWidth)
                                             }
                                         }
+                                        // "Leave the gap" is the space *between* the picture and the panel,
+                                        // whichever side each is on: it must never end up on the outside,
+                                        // pushing the widgets off the screen's edge
+                                        val gapSlot: @Composable () -> Unit = {
+                                            if (sideContent && cameraSide == CAMERA_SIDE_LEFT) Spacer(Modifier.weight(1f))
+                                        }
                                         if (!panelFirst) cameraSlot()
-                                        // "Leave the gap": the space between the picture and a fixed-width
-                                        // panel. Centring already holds that space in its own weighted box
-                                        if (sideContent && cameraSide == CAMERA_SIDE_LEFT) Spacer(Modifier.weight(1f))
+                                        if (!panelFirst) gapSlot()
                                         if (sideContent && haDisplay.homeDashboard != null) {
                                             // A dashboard chosen for the Home tab: its sections, card by card
                                             HaAssistantTab(
@@ -757,7 +763,10 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                         }
-                                        if (panelFirst) cameraSlot()
+                                        if (panelFirst) {
+                                            gapSlot()
+                                            cameraSlot()
+                                        }
                                     }
                                 }
                             }
@@ -1117,7 +1126,6 @@ class MainActivity : ComponentActivity() {
                         ColourPickerDialog(
                             title = "Background colour",
                             subtitle = "The launcher keeps its dark surfaces; the colour sits behind them, under the darkness setting.",
-                            palette = BackgroundColours,
                             current = prefs.backgroundColour,
                             onPick = {
                                 prefs.backgroundColour = it

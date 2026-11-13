@@ -38,6 +38,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -237,12 +238,25 @@ fun TopDialog(
                                 }
                             }
                         } else if (subtitle != null) {
-                            Column {
-                                Text(title, style = MaterialTheme.typography.titleMedium)
-                                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // One line each: a long title used to wrap and push the buttons out of the row
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
+                                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         } else {
-                            Text(title, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                title,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
                         }
                         Spacer(Modifier.weight(1f))
                         if (info != null) {
