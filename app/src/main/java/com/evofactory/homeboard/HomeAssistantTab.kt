@@ -222,6 +222,8 @@ fun HaAssistantTab(
     dashboard: String?,
     tabFocus: FocusRequester,
     onSetUp: () -> Unit,
+    // Services with no entity of their own, as "domain.service": one button each, in their own card
+    services: List<String> = emptyList(),
     modifier: Modifier = Modifier,
     // Each card (a dashboard's section, or a room) in a column of its own, scrolling sideways
     sectionColumns: Boolean = false,
@@ -265,7 +267,12 @@ fun HaAssistantTab(
         if (leading != null && all.size > 1) listOf(DashboardView(all.first().title, all.flatMap { it.cards })) else all
     }
     val viewTabs = remember(views.size) { List(views.size) { FocusRequester() } }
-    val cards = if (board != null) views.getOrNull(viewIndex)?.cards.orEmpty() else sensorCards(entityIds, entities)
+    val entityCards = if (board != null) views.getOrNull(viewIndex)?.cards.orEmpty() else sensorCards(entityIds, entities)
+    // A card of its own, last, and only when something is chosen: an empty list changes nothing
+    val serviceCard = services.takeIf { it.isNotEmpty() }?.let { chosen ->
+        SensorCard(SERVICES_KEY, "Services", chosen.map { "$ServicePrefix$it" })
+    }
+    val cards = entityCards + listOfNotNull(serviceCard)
     val names = board?.names.orEmpty()
     // Up from the top cards: to the views, if there are several, else to the tab
     val cardsUp = viewTabs.getOrNull(viewIndex)?.takeIf { views.size > 1 } ?: tabFocus
@@ -884,7 +891,9 @@ private fun CardContent(
             .onFocusChanged { if (it.isFocused) onButtonFocused(index) }
             // Only once gone into the card
             .focusProperties { canFocus = entered }
-        if (isAlarm(id)) {
+        if (id.startsWith(ServicePrefix)) {
+            ServiceButton(connection, id.removePrefix(ServicePrefix), modifier)
+        } else if (isAlarm(id)) {
             AlarmRow(connection, id, names[id], modifier)
         } else if (isHaVacuum(id)) {
             VacuumRow(connection, id, names[id], modifier)
@@ -915,7 +924,8 @@ private fun CardHeading(text: String, modifier: Modifier = Modifier) {
 private fun isAlarm(id: String) = id.substringBefore('.') == "alarm_control_panel"
 
 /** Buttons (scenes, scripts, buttons), switches (lights, switches, automations…) and selects: what OK acts on in a card */
-private fun isInteractive(id: String) = isHaAction(id) || isHaToggle(id) || isHaSelect(id) || isAlarm(id)
+private fun isInteractive(id: String) =
+    isHaAction(id) || isHaToggle(id) || isHaSelect(id) || isAlarm(id) || id.startsWith(ServicePrefix)
 
 /**
  * A light, switch, fan or input boolean: a sensor row with a switch at its end, showing whether
@@ -1266,6 +1276,45 @@ private fun Modifier.widenBy(by: Dp) = layout { measurable, constraints ->
     )
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
 }
+
+/** A service that has no entity: "domain.service" as its own button, greyed out until connected */
+@Composable
+private fun ServiceButton(connection: HaConnection, key: String, modifier: Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
+    val ready = connection.session != null
+    val domain = key.substringBefore('.')
+    val name = key.substringAfter('.')
+    Surface(
+        onClick = { connection.runService(domain, name, scope, context) },
+        modifier = modifier,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = if (ready) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.5f),
+            focusedContainerColor = colors.onSurface,
+            focusedContentColor = colors.inverseOnSurface,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MdiIcon(defaultHaIcon(domain, null, ""), color = LocalContentColor.current)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(name.replace('_', ' ').replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
+                Text(domain, style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.7f))
+            }
+        }
+    }
+}
+
+/** The card of chosen services, and the prefix that marks one in a card's ids */
+private const val SERVICES_KEY = "services"
+private const val ServicePrefix = "svc:"
 
 /** A scene, script or button, as a button the width of its card; greyed out until connected, and while one runs */
 @Composable

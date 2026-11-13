@@ -1313,3 +1313,60 @@ room clean is `vacuum.send_command` with `command: spot_area` and `params.rooms`
   run in this session never landed on it (the card's switches take the focus; the app row below caught two
   stray OKs and opened Plexy twice). The "Clean a room" menu and its room list are therefore **built and
   compiled, not seen on the TV**. The next step for it is one remote press on Yiko's row.
+
+## F9 — the generic service tile (2026-11-13)
+
+M4's other leftover: a way to run a Home Assistant service that has no entity of its own
+(`input_number.reload`, `automation.reload`). Built on C4's shared picker, not a fourth one.
+
+### Discovery, before any code
+
+`get_services` over the live websocket returns **116 domains**, each `{service: {fields: …}}` — this server
+sends no names or descriptions, so nothing but the service names is shown. `input_number.reload`,
+`automation.reload` and `script.turn_on` are all there.
+
+### New files
+
+| File | What it is |
+|---|---|
+| `HaServicesDialog.kt` | The shared picker over every `domain.service` the server reports: the domain as the label, the service under it, `Add it` / `Leave it out` / move, and the count line. Read when it opens, so a service an integration adds needs no rebuild |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistant.kt` | `HaSession.services()` (the `get_services` command, sorted) and `runService(domain, service)` — a call with no target, same timeout and no-answer handling as `callService` |
+| `HomeAssistantPanel.kt` | `HaConnection.runService(...)`, the same not-connected and `HaException` toasts as the other rows |
+| `LauncherPrefs.kt` | `haServices` (`ha_services`, a string list, default empty — a new key, no format change) |
+| `SettingsSchema.kt` | Assistant → *Devices and actions* → **Custom services**, a List row with `SettingAction.OpenHaServices` |
+| `SettingsMenuDialog.kt` | The action's hook |
+| `MainActivity.kt` | The dialog's state, the pref read at start, in `onSettingsChanged` and in `applyImport`, and `services` handed to the Assistant tab |
+| `HomeAssistantTab.kt` | A **Services** card, last, only when the list is non-empty: one `ServiceButton` per `domain.service`, "Reload" over "input_number", that calls `runService`. A `svc:` prefix marks one in a card's ids, so the card's height, its focus and its OK-to-enter behaviour are the ordinary ones |
+
+### Deliberate designs worth keeping
+
+- **Nothing free-typed** (Ema's decision): every entry comes from the server's own list, so a typo cannot
+  become a tile.
+- **Nothing new on screen when the list is empty**: the card is not added at all, so a TV that never chose a
+  service looks exactly as it did.
+- **HA's own refusals are shown**: the tile toasts whatever Home Assistant answers. `input_number.reload`
+  answers **"Unauthorized"** on this TV because its user is not an admin — that is Home Assistant's
+  permission model, not an app fault, and the toast is how you learn it.
+
+### Verified on the Shield (2026-11-13, 11:45–11:57)
+
+- **Custom services · None chosen** on the Assistant page; OK opened the picker, which listed the live
+  services — `adguard · add_url`, `adguard · disable_url`, `adguard · enable_url`, `adguard · refresh`, … —
+  the domain as the label, the service under it (screenshot).
+- With one chosen, the Assistant tab grew a **Services** card, last in the left column, with one button
+  ("Reload" over "input_number", then "Turn on" over "script" for the second attempt) (screenshots).
+- Pressing the tile called Home Assistant: `input_number.reload` came back as the toast **"Unauthorized"**
+  (admin-only for this TV's user), and `script.turn_on` produced no error at all — the tile runs what it
+  says and surfaces what the server says.
+- The empty-state line was wrong on the first build ("Home Assistant reports no services" over a full
+  list). The fix reads "Nothing chosen: no service button appears on the Assistant tab" when there is a
+  list and nothing selected, and keeps the "no services" line for a list that really is empty; that
+  wording was **not** re-opened on the TV (the build with it is installed, and the picker had already been
+  seen).
+- **Puts back**: `ha_services` removed, so the list is empty as it was found (68 keys, the two additions
+  below are the default values of keys the rows wrote).

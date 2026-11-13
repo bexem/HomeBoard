@@ -606,6 +606,31 @@ class HaSession internal constructor(private val socket: WebSocket) {
     suspend fun vacuum(entityId: String, service: String) = callService(entityId, service)
 
     /**
+     * Every service the server offers, domain → service names, from its own `get_services` command.
+     * The payload carries each service's `fields` and nothing else on this server, so the names are
+     * all there is to show: no descriptions are invented.
+     */
+    suspend fun services(): Map<String, List<String>> {
+        val result = command("get_services") as? JSONObject ?: return emptyMap()
+        return result.keys().asSequence().associateWith { domain ->
+            (result.optJSONObject(domain)?.keys()?.asSequence()?.toList() ?: emptyList()).sorted()
+        }
+    }
+
+    /** Runs a service that has no entity of its own, e.g. `input_number.reload` */
+    suspend fun runService(domain: String, service: String) {
+        try {
+            command("call_service") {
+                put("domain", domain)
+                put("service", service)
+            }
+        } catch (e: HaException) {
+            if (e.message == NO_ANSWER) socket.cancel()
+            throw e
+        }
+    }
+
+    /**
      * Cleans one room of a robot that names them: the id the entity's own `rooms` attribute gives, sent
      * as the Deebot integration takes it (`vacuum.send_command`, `spot_area`). Nothing here knows what a
      * room is called or how many there are.

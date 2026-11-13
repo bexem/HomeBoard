@@ -151,6 +151,17 @@ class HaConnection {
     }
 
     /** Drives a vacuum: "start", "pause" or "return_to_base"; a failure shows as a toast */
+    fun runService(domain: String, service: String, scope: CoroutineScope, context: Context) {
+        val session = session ?: return notConnected(context)
+        scope.launch {
+            try {
+                session.runService(domain, service)
+            } catch (e: HaException) {
+                Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     fun vacuumRoom(id: String, roomId: String, scope: CoroutineScope, context: Context) {
         val session = session ?: return notConnected(context)
         scope.launch {

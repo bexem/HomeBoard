@@ -89,6 +89,8 @@ class MainActivity : ComponentActivity() {
     private var haTopBar by mutableStateOf(emptyList<String>())
     // The Home Assistant dashboard the Assistant tab shows instead, if any
     private var haDisplay by mutableStateOf(HaDisplay())
+    // Services with no entity of their own, shown as their own card on the Assistant tab
+    private var haServices by mutableStateOf<List<String>>(emptyList())
     private var frigate by mutableStateOf(FrigateServer())
     private var frigateOpen by mutableStateOf(false)
     private var settingsOpen by mutableStateOf(false)
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
     private var screensaverOpen by mutableStateOf(false)
     private var entityNamesOpen by mutableStateOf(false)
     private var haAddressOpen by mutableStateOf(false)
+    private var haServicesOpen by mutableStateOf(false)
     private var haConnectFirst by mutableStateOf(false)
     private var homeHelperOpen by mutableStateOf(false)
     private var logoutConfirm by mutableStateOf(false)
@@ -232,6 +235,7 @@ class MainActivity : ComponentActivity() {
         EntityNames.load(prefs)
         haTopBar = prefs.haTopBar
         haDisplay = prefs.haDisplay
+        haServices = prefs.haServices
         frigate = prefs.frigate
         hiddenWatching = prefs.hiddenWatching
         homeAlertsRow = prefs.homeAlertsRow
@@ -574,6 +578,7 @@ class MainActivity : ComponentActivity() {
                                 homeAssistantSet = haServer.isSet,
                                 entityIds = haEntities,
                                 dashboard = haDisplay.dashboard,
+                                services = haServices,
                                 tabFocus = assistantTabFocus,
                                 onSetUp = { haDialogTab = HaDialogTab.Home },
                                 sectionColumns = haDisplay.sectionColumns,
@@ -964,6 +969,17 @@ class MainActivity : ComponentActivity() {
                     if (notificationsOpen) {
                         NotificationsDialog(onDismiss = { notificationsOpen = false })
                     }
+                    if (haServicesOpen) {
+                        HaServicesDialog(
+                            server = haServer,
+                            chosen = haServices,
+                            onChange = {
+                                haServices = it
+                                prefs.haServices = it
+                            },
+                            onDismiss = { haServicesOpen = false },
+                        )
+                    }
                     if (notificationGrantOpen) {
                         NotificationAccessDialog(onDismiss = { notificationGrantOpen = false })
                     }
@@ -1098,6 +1114,7 @@ class MainActivity : ComponentActivity() {
                                 openFrigate = { frigateOpen = true },
                                 openNotificationAccess = { notificationsOpen = true },
                                 // The panel when access is off (it says how to grant it), the status when it is on
+                                openHaServices = { haServicesOpen = true },
                                 openNotificationGrant = {
                                     if (Notifications.granted || Notifications.enabled(appContext)) {
                                         notificationGrantOpen = true
@@ -1155,6 +1172,7 @@ class MainActivity : ComponentActivity() {
                                 // The Assistant and Frigate rows the page now holds
                                 EntityNames.load(prefs)
                                 haDisplay = prefs.haDisplay
+                                haServices = prefs.haServices
                                 alertsTab = prefs.alertsTab
                                 badge = prefs.badge
                                 alertsDot = prefs.alertsDot
@@ -1256,6 +1274,7 @@ class MainActivity : ComponentActivity() {
             cameraSound = prefs.cameraSound
             calendarConfig = prefs.calendarConfig()
             haDisplay = prefs.haDisplay
+            haServices = prefs.haServices
             alertsTab = prefs.alertsTab
             badge = prefs.badge
             alertsDot = prefs.alertsDot

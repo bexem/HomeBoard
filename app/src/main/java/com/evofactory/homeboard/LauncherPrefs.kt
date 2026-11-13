@@ -138,6 +138,11 @@ class LauncherPrefs(context: Context) {
     val haDashboard: String? get() = haDisplay.dashboard
     val haHomeDashboard: String? get() = haDisplay.homeDashboard
 
+    /** Services with no entity of their own, chosen from the server's list: "domain.service" */
+    var haServices: List<String>
+        get() = readList("ha_services")
+        set(value) = writeList("ha_services", value)
+
     // The chosen dashboard's own title, so a row can print "Config" instead of "lovelace-config".
     // Cosmetic and local: written when the dialog saves, never part of an export.
     var haDashboardLabel: String

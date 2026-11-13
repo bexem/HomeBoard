@@ -37,6 +37,7 @@ class SettingsActions(
     val openNotificationAccess: () -> Unit,
     // The grant's own status, once it is granted; the panel is where it is asked for while it is off
     val openNotificationGrant: () -> Unit,
+    val openHaServices: () -> Unit,
     val openPing: () -> Unit,
     // Clears the Alerts tab's dot and the top bar's count
     val markAlertsReviewed: () -> Unit,
@@ -63,6 +64,7 @@ class SettingsActions(
         SettingAction.OpenFrigate -> openFrigate
         SettingAction.OpenNotificationAccess -> openNotificationAccess
         SettingAction.OpenNotificationGrant -> openNotificationGrant
+        SettingAction.OpenHaServices -> openHaServices
         SettingAction.OpenPing -> openPing
         SettingAction.MarkAlertsReviewed -> markAlertsReviewed
         SettingAction.OpenSystemSettings -> openSystemSettings

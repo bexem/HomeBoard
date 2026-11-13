@@ -73,6 +73,9 @@ sealed interface SettingAction {
 
     /** What notification access means once it is granted: the status screen, not the list again */
     data object OpenNotificationGrant : SettingAction
+
+    /** Services with no entity of their own, chosen from the server's own list */
+    data object OpenHaServices : SettingAction
     data object OpenPing : SettingAction
     data object OpenSystemSettings : SettingAction
     data object ExportSettings : SettingAction
@@ -494,6 +497,15 @@ val AllSettings: List<SettingDef> = listOf(
         "Rooms side by side",
         "Each room's card in a column of its own; off, they fill the width one under another",
         LauncherPrefs::haSectionColumns,
+    ),
+    list(
+        "ha_services",
+        SettingSection.Assistant,
+        "Devices and actions",
+        "Custom services",
+        "Services with no entity of their own, e.g. input_number.reload; each one becomes a button on the Assistant tab",
+        LauncherPrefs::haServices,
+        SettingAction.OpenHaServices,
     ),
     toggle(
         "ha_bottom_row",
