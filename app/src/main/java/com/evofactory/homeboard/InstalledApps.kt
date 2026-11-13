@@ -1,5 +1,6 @@
 package com.evofactory.homeboard
 
+import android.graphics.BitmapFactory
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -77,7 +78,38 @@ fun loadInstalledApps(context: Context): List<InstalledApp> {
 // Decoded tile images survive list refreshes, so returning to the launcher is instant
 private val tileImageCache = LruCache<String, TileImage>(100)
 
-fun cachedTileImage(app: InstalledApp): TileImage? = tileImageCache[app.key]
+/**
+ * Icons the owner chose for an app, by package, as "package=file" entries. Set once when the launcher
+ * starts and whenever one is picked, so the tiles keep loading through the same path they always did.
+ */
+var appIconOverrides: Map<String, String> = emptyMap()
+
+/** Forget a decoded icon, so the app's own art shows again after a reset */
+fun tileImageCacheInvalidate(key: String) {
+    tileImageCache.remove(key)
+    tileImageCache.remove("override:$key")
+}
+
+/** A chosen icon, decoded and cached beside the app's own images */
+fun appIconOverride(app: InstalledApp): TileImage? = appIconOverrides[app.key]?.let { path ->
+    tileImageCache.get("override:" + app.key) ?: runCatching {
+        BitmapFactory.decodeFile(path)?.let { bitmap ->
+            // Scaled down once: a phone photo as an icon would cost memory in every row
+            val tall = 288f / bitmap.height
+            val wide = 512f / bitmap.width
+            val scale = maxOf(tall, wide)
+            val scaled = if (scale >= 1f) bitmap else android.graphics.Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+            TileImage(scaled.asImageBitmap(), isBanner = true)
+        }?.also { tileImageCache.put("override:" + app.key, it) }
+    }.onFailure { AppLog.w("Icons", "Can't decode the chosen icon for ${app.key}", it) }.getOrNull()
+}
+
+fun cachedTileImage(app: InstalledApp): TileImage? = appIconOverride(app) ?: tileImageCache[app.key]
 
 /** Slow (decodes resources from the other app's APK): call off the main thread. */
 fun loadTileImage(context: Context, app: InstalledApp): TileImage? {

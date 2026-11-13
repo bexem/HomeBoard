@@ -33,9 +33,6 @@ internal fun sdpTracks(sdp: String): List<SdpTrack> = sdpSections(sdp).drop(1).m
 }
 
 /** The description without its audio tracks, which the player then never sees */
-internal fun sdpWithoutAudio(sdp: String): String =
-    sdpSections(sdp).filterNot { it.first().startsWith("m=audio") }.joinToString("") { it.joinToString("") }
-
 // The session lines, then one list per track, from its m= line. Each line keeps its line ending.
 internal fun sdpSections(sdp: String): List<List<String>> {
     val sections = mutableListOf(mutableListOf<String>())

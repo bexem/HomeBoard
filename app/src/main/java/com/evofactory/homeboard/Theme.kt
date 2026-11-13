@@ -11,7 +11,14 @@ import androidx.tv.material3.darkColorScheme
  * - onSurfaceVariant: secondary text and the text of inactive buttons
  * - border: the outline of the item the remote is on
  */
+/** A switch that's on, a filled button, a slider: the blue of the remote's blue button */
+val SwitchOn = Color(0xFF5A8FD9)
+
 val AppColorScheme = darkColorScheme(
+    // Filled buttons and sliders take the blue: left at the library's default a filled button read
+    // as disabled next to the outlined ones
+    primary = SwitchOn,
+    onPrimary = Color(0xFF0D1A2B),
     surfaceVariant = Color(0xFF2B2A2F),
     onSurface = Color(0xFFC4C1C6),
     onSurfaceVariant = Color(0xFF9A979D),
@@ -24,8 +31,7 @@ val RaisedSurface = Color(0xFF3D3C42)
 /** A step above RaisedSurface: buttons on a raised card */
 val HigherSurface = Color(0xFF504E55)
 
-/** A switch that's on: its track, the blue of the remote's blue button, and its knob */
-val SwitchOn = Color(0xFF5A8FD9)
+/** The knob of a switch that is on */
 val SwitchKnob = Color(0xFFEDEBF0)
 
 /** A step below onSurfaceVariant: figures that are only there if you look for them */

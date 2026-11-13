@@ -4,6 +4,7 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -197,7 +198,9 @@ class HaEntity(
 ) {
     val domain get() = id.substringBefore('.')
     val fullName: String get() = attributes.string("friendly_name") ?: id
-    val name: String get() = entityName ?: fullName
+    // The launcher's own label wins: Home Assistant's friendly names follow a naming scheme from
+    // years ago ("Living Room - Lights - Main"), and renaming a device here leaves its entity_id alone
+    val name: String get() = EntityNames.label(id, entityName ?: fullName)
     val unit: String? get() = attributes.string("unit_of_measurement")
 
     /** What it measures or detects, e.g. "temperature" or "door"; null if not set */
@@ -210,7 +213,9 @@ class HaEntity(
     val isAction get() = domain in ActionDomains
 
     /** What can be shown above the app row: actions, weather, sensors and binary sensors (doors, motion…) */
-    val isPickable get() = isAction || domain in setOf("weather", "sensor", "binary_sensor")
+    val isPickable get() = isAction || domain in setOf(
+        "weather", "sensor", "binary_sensor", "light", "switch", "fan", "alarm_control_panel", "vacuum",
+    )
 
     /** Weather: the current temperature, in [temperatureUnit] */
     val temperature: Double? get() = attributes.optDouble("temperature").takeUnless { it.isNaN() }
@@ -294,7 +299,31 @@ private fun JSONObject.string(key: String): String? = if (isNull(key)) null else
 private fun JSONArray?.objects(): List<JSONObject> =
     if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }
 
+/**
+ * The names the launcher shows for entities, by id: "id=Label" lines, edited on the TV and used
+ * everywhere a name is drawn (cards, rows, the top bar, the picker). It never touches Home Assistant
+ * and never an entity's id.
+ */
+object EntityNames {
+    @Volatile
+    private var labels: Map<String, String> = emptyMap()
+
+    fun load(prefs: LauncherPrefs) {
+        labels = prefs.haEntityNames.associate { it.substringBefore('=') to it.substringAfter('=') }
+            .filterKeys { it.contains('.') }
+            .filterValues { it.isNotBlank() }
+    }
+
+    fun label(id: String, fallback: String): String = labels[id] ?: fallback
+
+    /** The label set for [id], if any */
+    fun set(id: String): String? = labels[id]
+}
+
 fun isHaAction(entityId: String) = entityId.substringBefore('.') in ActionDomains
+
+/** A vacuum's service names, for the row that drives it */
+fun isHaVacuum(entityId: String) = entityId.substringBefore('.') == "vacuum"
 
 fun isHaWeather(entityId: String) = entityId.substringBefore('.') == "weather"
 
@@ -315,7 +344,7 @@ fun haEntityType(entityId: String) = entityId.substringBefore('.').let { if (it 
 
 // The pings notice a server that vanished without closing the connection (e.g. Home Assistant
 // restarting, Wi-Fi gone)
-private val httpClient by lazy {
+internal val httpClient by lazy {
     OkHttpClient.Builder()
         .connectTimeout(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         .pingInterval(30, TimeUnit.SECONDS)
@@ -520,6 +549,9 @@ class HaSession internal constructor(private val socket: WebSocket) {
         listOf(HaDashboardInfo(null, "Overview")) +
             (optionalCommand("lovelace/dashboards/list") as? JSONArray).objects().mapNotNull { board ->
                 val path = board.string("url_path") ?: return@mapNotNull null
+                // The default dashboard is listed under the path its own URL uses: the first entry
+                // above is it, so this copy would read as a second "Overview" that saves as the first
+                if (path == HA_DEFAULT_DASHBOARD_PATH) return@mapNotNull null
                 HaDashboardInfo(path, board.string("title") ?: path)
             }
 
@@ -569,6 +601,24 @@ class HaSession internal constructor(private val socket: WebSocket) {
 
     /** Switches a light, switch, fan or input boolean on if it's off, and off if it's on */
     suspend fun toggle(entityId: String) = callService(entityId, "toggle")
+
+    /**
+     * Arms or disarms an alarm. [action] is a service of the alarm domain: alarm_arm_home,
+     * alarm_arm_away or alarm_disarm. The code goes straight into the call and is never kept.
+     */
+    suspend fun alarm(entityId: String, action: String, code: String?) =
+        callService(entityId, action) { if (!code.isNullOrEmpty()) put("code", code) }
+
+    /** A light or a switch turned on at [percent] brightness */
+    suspend fun setBrightness(entityId: String, percent: Int) =
+        callService(entityId, "turn_on") { put("brightness_pct", percent.coerceIn(1, 100)) }
+
+    /** A fan at [percent] of its speed */
+    suspend fun setPercentage(entityId: String, percent: Int) =
+        callService(entityId, "set_percentage") { put("percentage", percent.coerceIn(1, 100)) }
+
+    /** A vacuum: "start", "pause" or "return_to_base", as its supported features allow */
+    suspend fun vacuum(entityId: String, service: String) = callService(entityId, service)
 
     /** Sets a select or input select to [option], one of its options */
     suspend fun selectOption(entityId: String, option: String) = callService(entityId, "select_option") { put("option", option) }

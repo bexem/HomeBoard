@@ -172,10 +172,23 @@ fun AppRowSpace(modifier: Modifier = Modifier, content: @Composable () -> Unit) 
 fun AppRow(
     apps: List<InstalledApp>,
     hiddenApps: List<InstalledApp>,
+    // Package keys of the apps to show, in this order; empty shows every app in [apps]'s order
+    favourites: List<String>,
+    // A tile to select once, when a page that covered the row has closed
+    restoreKey: String? = null,
+    onRestored: () -> Unit = {},
+    // Show "All apps" as the last tile
+    allAppsTile: Boolean,
+    // Left on the first tile goes to the last, right off the last goes to the first
+    wrapRow: Boolean,
     showHidden: Boolean,
     onShowHiddenChange: (Boolean) -> Unit,
     onHide: (InstalledApp) -> Unit,
+    onSetIcon: (InstalledApp) -> Unit = {},
+    onResetIcon: (InstalledApp) -> Unit = {},
     onUnhide: (InstalledApp) -> Unit,
+    onPin: (InstalledApp) -> Unit,
+    onUnpin: (InstalledApp) -> Unit,
     onReorder: (List<InstalledApp>) -> Unit,
     // Where up goes from the tile on screen in this 0-based slot
     upFocus: (slot: Int) -> FocusRequester,
@@ -191,6 +204,7 @@ fun AppRow(
     // Shows the "No Recent Alerts" tile in front of the apps, which isn't their first tile
     showNoAlertsTile: Boolean,
     onNoAlertsClick: () -> Unit,
+    onOpenAllApps: () -> Unit,
     onNoAlertsSelected: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -211,8 +225,12 @@ fun AppRow(
     // The tile sent to Android's uninstall, and where to go if it does disappear
     var uninstalling by remember { mutableStateOf<Pair<String, FocusRequest?>?>(null) }
 
+    // Favourites filter the row and set its order; with none pinned this is every visible app
+    val pinned = if (favourites.isEmpty()) apps else favourites.mapNotNull { key -> apps.find { it.key == key } }
     // Hidden apps always come last, after the apps you've arranged
-    val shown = (moveOrder ?: apps) + if (showHidden) hiddenApps else emptyList()
+    val shown = (moveOrder ?: pinned) + if (showHidden) hiddenApps else emptyList()
+    // The tile after the last app, which isn't an app: it opens everything
+    val allAppsShown = allAppsTile
     val hiddenKeys = remember(hiddenApps) { hiddenApps.map { it.key }.toSet() }
 
     var selectedKey by remember { mutableStateOf<String?>(null) }
@@ -254,6 +272,52 @@ fun AppRow(
         withFrameNanos { } // let the row lay out there, so the tile is composed and focusable
         runCatching { focusRequesters[request.key]?.requestFocus() }
         pendingFocus = null
+    }
+
+    /** The tile to jump to when the selection leaves either end, or null to let the row stop */
+    fun wrapTarget(forward: Boolean): String? {
+        if (!wrapRow || movingKey != null) return null
+        val keys = shown.map { it.key } + if (allAppsShown) listOf(ALL_APPS_TILE_KEY) else emptyList()
+        if (keys.size < 2) return null
+        val current = selectedKey ?: return null
+        val index = keys.indexOf(current)
+        if (index < 0) return null
+        return when {
+            forward && index == keys.lastIndex -> keys.first()
+            !forward && index == 0 -> keys.last()
+            else -> null
+        }
+    }
+
+    /** Scrolls the row so [key] is laid out, then selects it */
+    fun focusTile(key: String) {
+        val index = shown.indexOfFirst { it.key == key }
+        val slot = if (index >= 0) index + tilesBeforeApps else shown.size + tilesBeforeApps
+        scope.launch {
+            listState.scrollToItem(slot)
+            withFrameNanos { }
+            runCatching { focusRequesters[key]?.requestFocus() }
+        }
+    }
+
+    /** Right off the last tile and left off the first come back round, when the row wraps */
+    fun onRowKey(event: KeyEvent): Boolean {
+        if (event.type != KeyEventType.KeyDown) return false
+        val forward = when (event.key) {
+            Key.DirectionRight -> true
+            Key.DirectionLeft -> false
+            else -> return false
+        }
+        val target = wrapTarget(forward) ?: return false
+        focusTile(target)
+        return true
+    }
+
+    LaunchedEffect(restoreKey) {
+        val key = restoreKey ?: return@LaunchedEffect
+        withFrameNanos { } // the row lays out before focus is asked for
+        focusTile(key)
+        onRestored()
     }
 
     fun shift(delta: Int) {
@@ -299,7 +363,7 @@ fun AppRow(
             })
         } else {
             add(MenuAction("Move") {
-                moveOrder = apps
+                moveOrder = pinned
                 movingKey = app.key
                 pendingFocus = FocusRequest(app.key, keep)
             })
@@ -310,6 +374,15 @@ fun AppRow(
                 (rest.getOrNull(index) ?: rest.getOrNull(index - 1))?.let { pendingFocus = FocusRequest(it.key, keep) }
                 onHide(app)
             })
+        }
+        if (app.key in favourites) {
+            add(MenuAction("Unpin from favourites") { onUnpin(app) })
+        } else {
+            add(MenuAction("Pin to favourites") { onPin(app) })
+            if (appIconOverrides.containsKey(app.key)) {
+                add(MenuAction("Reset icon") { onResetIcon(app) })
+            }
+            add(MenuAction("Set icon") { onSetIcon(app) })
         }
         add(MenuAction("Info") { context.openAppInfo(app) })
         if (context.canUninstall(app)) {
@@ -343,7 +416,10 @@ fun AppRow(
             LazyRow(
                 state = listState,
                 // Coming back down from the cog lands on the tile that was left, not the one nearest the cog
-                modifier = Modifier.focusRequester(rowFocus).focusRestorer(),
+                modifier = Modifier
+                    .focusRequester(rowFocus)
+                    .focusRestorer()
+                    .onPreviewKeyEvent(::onRowKey),
                 // Vertical padding leaves room for the focused tile to grow without being clipped
                 contentPadding = PaddingValues(horizontal = EdgePadding, vertical = TileGrowRoom),
                 horizontalArrangement = Arrangement.spacedBy(TileSpacing),
@@ -398,7 +474,14 @@ fun AppRow(
                                 down = downFocus
                                 // Past the ends the search would otherwise jump down to the row below
                                 if (app == shown.first() && !showNoAlertsTile) left = FocusRequester.Cancel
-                                if (app == shown.last()) right = FocusRequester.Cancel
+                                if (app == shown.last()) {
+                                    // The All apps tile sits after the last app, out of the row's index
+                                    right = if (allAppsShown) {
+                                        focusRequesters.getOrPut(ALL_APPS_TILE_KEY) { FocusRequester() }
+                                    } else {
+                                        FocusRequester.Cancel
+                                    }
+                                }
                             }
                             .then(if (moving) Modifier.onPreviewKeyEvent(::onMoveKey) else Modifier),
                     ) {
@@ -415,7 +498,44 @@ fun AppRow(
                         }
                     }
                 }
+                if (allAppsShown) {
+                    item(key = ALL_APPS_TILE_KEY) {
+                        val requester = focusRequesters.getOrPut(ALL_APPS_TILE_KEY) { FocusRequester() }
+                        AllAppsTile(
+                            width = tileWidth,
+                            onClick = onOpenAllApps,
+                            modifier = Modifier
+                                .onFocusChanged {
+                                    if (it.hasFocus) selectedKey = ALL_APPS_TILE_KEY else if (selectedKey == ALL_APPS_TILE_KEY) selectedKey = null
+                                }
+                                .focusRequester(requester)
+                                .focusProperties {
+                                    up = upFocus(listState.slotOnScreen(ALL_APPS_TILE_KEY))
+                                    down = downFocus
+                                    left = focusRequesters.getOrPut(shown.last().key) { FocusRequester() }
+                                },
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+/** The key of the tile after the last app: not a package, so it can never collide with one */
+const val ALL_APPS_TILE_KEY = "all-apps"
+
+/** The tile that opens every app, for the ones not pinned to the row */
+@Composable
+private fun AllAppsTile(width: Dp, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(onClick = onClick, modifier = modifier.width(width).aspectRatio(16f / 9f)) {
+        Column(
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            MdiIcon("mdi:apps", size = 40.dp)
+            Text("All apps", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }

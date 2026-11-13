@@ -3,20 +3,26 @@ package com.evofactory.homeboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -39,6 +45,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.OutlinedButtonDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
@@ -55,6 +62,11 @@ class ListFocus {
     fun row(key: String): Modifier = Modifier
         .focusRequester(requester(key))
         .onFocusChanged { if (it.isFocused) lastKey = key }
+
+    /** Forget where the remote was: a new page starts at its first row */
+    fun reset() {
+        lastKey = null
+    }
 
     /** The row last on if still listed, otherwise the first */
     fun current(keys: List<String>): FocusRequester = currentOrNull(keys) ?: FocusRequester.Default
@@ -76,6 +88,11 @@ class DialogButton(
     val label: String,
     val enabled: Boolean = true,
     val primary: Boolean = false,
+    /**
+     * Whether a primary button has something to do: filled in the accent colour when it has, and
+     * outlined like the others when it has not, so it never looks enabled with nothing to save
+     */
+    val highlight: Boolean = true,
     val focus: FocusRequester? = null,
     val onClick: () -> Unit,
 )
@@ -140,6 +157,8 @@ fun TopDialog(
     // When the X shouldn't do what Back does, e.g. Back goes up a folder
     onClose: () -> Unit = onDismiss,
     contentFocus: () -> FocusRequester? = { null },
+    // Where the remote starts when there is no tab bar: the dialog's own first item
+    openFocus: (() -> FocusRequester?)? = null,
     searchFocus: () -> FocusRequester? = { null },
     hint: String? = null,
     // To select the X from outside, e.g. when the dialog opens
@@ -152,7 +171,26 @@ fun TopDialog(
     fun focusOf(button: DialogButton) = button.focus ?: buttonFocus.getOrPut(button.label) { FocusRequester() }
     val close = closeFocus
     val firstButton = buttons.indexOfFirst { it.enabled }
-    val firstTop = tabFocus.firstOrNull() ?: buttons.getOrNull(firstButton)?.let(::focusOf) ?: close
+    // The tab that is already open, not the leftmost: a dialog opened onto one of its tabs puts the
+    // remote on that tab, so OK there does not silently switch to another
+    val firstTop = tabFocus.getOrNull(tabs.indexOfFirst { it.selected })
+        ?: tabFocus.firstOrNull()
+        ?: buttons.getOrNull(firstButton)?.let(::focusOf)
+        ?: close
+    // Opened onto a later tab: the remote starts on that tab, not on the leftmost one, so OK there
+    // does not switch away from the tab the row promised
+    val openedElsewhere = tabs.indexOfFirst { it.selected } > 0
+    LaunchedEffect(openedElsewhere) {
+        if (openedElsewhere) runCatching { firstTop.requestFocus() }
+    }
+    // A dialog without tabs opens on its content, not on the first button: the item cannot be
+    // focused until it is laid out, so this asks for a couple of frames first
+    LaunchedEffect(openFocus != null) {
+        if (openFocus == null) return@LaunchedEffect
+        withFrameNanos { }
+        withFrameNanos { }
+        openFocus.invoke()?.let { runCatching { it.requestFocus() } }
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
@@ -215,8 +253,20 @@ fun TopDialog(
                                 val modifier = Modifier.focusRequester(focusOf(button)).downIn().focusProperties {
                                     if (tabs.isEmpty() && index == firstButton) left = contentFocus() ?: close
                                 }
-                                if (button.primary) {
-                                    Button(onClick = button.onClick, enabled = button.enabled, modifier = modifier) { Text(button.label) }
+                                if (button.primary && button.highlight) {
+                                    // The accent, named rather than taken from the scheme: a filled
+                                    // button in the library's default colour read as disabled
+                                    Button(
+                                        onClick = button.onClick,
+                                        enabled = button.enabled,
+                                        colors = ButtonDefaults.colors(
+                                            containerColor = SwitchOn,
+                                            contentColor = FilledText,
+                                            focusedContainerColor = FilledText,
+                                            focusedContentColor = SwitchOn,
+                                        ),
+                                        modifier = modifier,
+                                    ) { Text(button.label) }
                                 } else {
                                     OutlinedButton(onClick = button.onClick, enabled = button.enabled, modifier = modifier) { Text(button.label) }
                                 }
@@ -244,10 +294,12 @@ fun TopDialog(
                     }
                     MenuDivider()
                     MaterialTheme(colorScheme = raised) {
-                        Column {
-                            val scope = remember { TopDialogScopeImpl(close) }
-                            scope.firstTop = firstTop
-                            scope.contentFocus = contentFocus
+                        val scope = remember { TopDialogScopeImpl(close) }
+                        scope.firstTop = firstTop
+                        scope.contentFocus = contentFocus
+                        // Scrolls when the body is taller than the window: rows below the fold were
+                        // unreachable for the remote (settings on a 1080p TV, 2026-11-12)
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             scope.content()
                         }
                     }
@@ -264,6 +316,9 @@ fun TopDialog(
         }
     }
 }
+
+/** Text on an accent-filled button */
+private val FilledText = Color(0xFF0D1A2B)
 
 // The X: a circle as tall as the buttons
 private val CloseSize = 40.dp

@@ -80,7 +80,11 @@ import androidx.media3.exoplayer.rtsp.RtspMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -271,6 +275,11 @@ fun CameraView(
     onCameraButton: (Int) -> Unit = {},
     // Full screen: the remote's channel up (1) or down (-1)
     onChannel: (Int) -> Unit = {},
+    // A Home Assistant camera: its playlist comes from [ha]; the address in [url] is then unused
+    ha: HaServer? = null,
+    haEntity: String? = null,
+    // The stream's shape as it arrives, so a box around this can match it
+    onAspect: (Float) -> Unit = {},
     waitForOtherPlayers: Boolean = false,
     onLiveChange: (Boolean) -> Unit = {},
     showProgress: Boolean = true,
@@ -314,6 +323,9 @@ fun CameraView(
             val snapshotInterval = if (compact) COMPACT_SNAPSHOT_INTERVAL_MS else SNAPSHOT_INTERVAL_MS
             val connection = CameraConnection(
                 context, url, useTcp, useAudio, withAudio, audible, stretch, video, frame, status, snapshots, snapshotInterval, minimizeStreams,
+                ha = ha ?: HaServer("", ""),
+                haEntity = haEntity,
+                onAspect = onAspect,
             )
             current.value = connection
             onStopOrDispose {
@@ -475,7 +487,13 @@ private class CameraConnection(
     private val snapshots: SnapshotStore,
     private val snapshotInterval: Long,
     private val decodersTakeTurns: Boolean,
+    // A Home Assistant camera: its HLS playlist comes from Home Assistant, not from an RTSP address
+    private val ha: HaServer,
+    private val haEntity: String?,
+    private val onAspect: (Float) -> Unit,
 ) {
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+    private var resolveJob: kotlinx.coroutines.Job? = null
     private val handler = Handler(Looper.getMainLooper())
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private var waitingForNetworkSince = 0L
@@ -531,14 +549,18 @@ private class CameraConnection(
         .build()
         .apply {
             applyAudio()
-            setMediaSource(
-                RtspMediaSource.Factory()
-                    .setForceUseRtpTcp(useTcp)
-                    .setSocketFactory(CameraSocketFactory(::onDescription))
-                    // Debug builds log the RTSP exchange with the camera (logcat tag RtspClient)
-                    .setDebugLoggingEnabled(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
-                    .createMediaSource(MediaItem.fromUri(url)),
-            )
+            // A Home Assistant camera's source is resolved on prepare: its playlist comes from Home
+            // Assistant, with the TV's token, so the device never talks to the camera or to go2rtc
+            if (haEntity == null) {
+                setMediaSource(
+                    RtspMediaSource.Factory()
+                        .setForceUseRtpTcp(useTcp)
+                        .setSocketFactory(CameraSocketFactory(::onDescription))
+                        // Debug builds log the RTSP exchange with the camera (logcat tag RtspClient)
+                        .setDebugLoggingEnabled(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+                        .createMediaSource(MediaItem.fromUri(url)),
+                )
+            }
             setVideoSurfaceView(video)
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() = onLive()
@@ -556,6 +578,8 @@ private class CameraConnection(
                     if (videoSize.height > 0) {
                         videoAspect = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
                         applyAspect()
+                        // The listener runs on the player's thread; the box around this is Compose state
+                        video.post { onAspect(videoAspect) }
                     }
                 }
             })
@@ -573,15 +597,20 @@ private class CameraConnection(
         setAudioAttributes(CAMERA_AUDIO, playing && audible)
     }
 
-    // On the player's thread: logs what the camera describes, and takes out its audio if unused
+    /**
+     * On the player's thread: logs what the camera describes, and hands it to the player unchanged.
+     *
+     * It used to take the audio track out of the description when "Use audio track" was off. That
+     * rewrite is what happened to every stream whose camera advertises sound — and the cameras here
+     * started advertising an AAC track — and from 2026-11-12 the player then described both tracks
+     * and never got a picture. The audio is disabled through the track selection instead
+     * ([applyAudio]), which costs nothing and changes nothing the player reads.
+     */
     private fun onDescription(sdp: String): String {
         val described = sdpTracks(sdp)
-        val takeOut = !useAudio && described.any { it.media == "audio" }
-        if (described != tracks) {
-            AppLog.i(TAG, "Player $logId tracks: ${described.joinToString()}" + if (takeOut) ", audio taken out" else "")
-        }
+        if (described != tracks) AppLog.i(TAG, "Player $logId tracks: ${described.joinToString()}")
         tracks = described
-        return if (takeOut) sdpWithoutAudio(sdp) else sdp
+        return sdp
     }
 
     private val attempt = Runnable { attempt() }
@@ -613,7 +642,9 @@ private class CameraConnection(
 
     init {
         openPlayers += 1
-        AppLog.i(TAG, "Player $logId started over ${if (useTcp) "TCP" else "UDP"}, open: $openPlayers")
+        // Host and path only: a camera's address can carry a login
+        val shown = if (haEntity != null) haEntity else url.substringAfter("://").substringAfter('@')
+        AppLog.i(TAG, "Player $logId started over ${if (haEntity != null) "HLS" else if (useTcp) "TCP" else "UDP"}, audio: ${if (useAudio) "on" else "off"}, $shown, open: $openPlayers")
         status.reset(Phase.Connecting)
         // Known before the stream's own shape is
         if (stretch) applyAspect()
@@ -630,6 +661,8 @@ private class CameraConnection(
         // Already dimmed when the launcher shows again, instead of the video layer's old frame
         status.phase = Phase.Connecting
         handler.removeCallbacksAndMessages(null)
+        resolveJob?.cancel()
+        scope.cancel()
         released = true
         playerWatch.release()
         openPlayers -= 1
@@ -665,7 +698,26 @@ private class CameraConnection(
         if (needsNewPlayer || network != lastNetwork) replacePlayer()
         lastNetwork = network
         player.stop()
-        player.prepare()
+        if (haEntity == null) {
+            player.prepare()
+        } else {
+            // One resolve at a time: a retry keeps the newest answer
+            resolveJob?.cancel()
+            resolveJob = scope.launch {
+                val playlist = haCameraStreamUrl(ha, haEntity)
+                if (playlist == null) {
+                    lose("Home Assistant has no stream for this camera", unreachable = false)
+                    return@launch
+                }
+                player.setMediaSource(
+                    HlsMediaSource.Factory(
+                        DefaultHttpDataSource.Factory()
+                            .setDefaultRequestProperties(mapOf("Authorization" to "Bearer ${ha.accessToken()}")),
+                    ).createMediaSource(MediaItem.fromUri(playlist)),
+                )
+                player.prepare()
+            }
+        }
     }
 
     /**

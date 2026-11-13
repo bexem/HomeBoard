@@ -27,6 +27,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -267,6 +269,46 @@ fun Context.openScreensaverSettings() {
  * The Cameras dialog's Screensaver tab: how long each camera shows, then whether HomeBoard is the
  * TV's screensaver. Choosing it is up to Android's settings, opened from the dialog's top row.
  */
+/**
+ * The screensaver's own dialog: it is the launcher's, not a camera's, so its row lives in the Launcher
+ * category instead of being a tab inside the camera one.
+ */
+@Composable
+fun ScreensaverDialog(prefs: LauncherPrefs, cameras: List<Camera>, onDismiss: () -> Unit) {
+    val rows = remember { ListFocus() }
+    var seconds by remember { mutableStateOf(prefs.screensaverSeconds) }
+    var showProgress by remember { mutableStateOf(prefs.screensaverShowProgress) }
+    var hidden by remember { mutableStateOf(prefs.screensaverHiddenCameras) }
+    val firstCamera = cameras.firstOrNull()?.let { rows.requester("screensaver:${it.id}") }
+    TopDialog(
+        title = "Screensaver",
+        onDismiss = onDismiss,
+        subtitle = "The cameras one after the other, once this TV's screensaver settings choose HomeBoard",
+        buttons = listOf(
+            DialogButton("TV screensaver settings", focus = rows.requester("tv"), onClick = {
+                val context = HomeBoardApp.instance
+                if (context.screensaverScreen() != null) context.openScreensaverSettings() else context.openSystemSettings()
+            }),
+            DialogButton("Done", primary = true, onClick = onDismiss),
+        ),
+        contentFocus = { rows.currentOrNull(listOf("shorter", "longer") + cameras.map { "screensaver:${it.id}" } + "progress") ?: rows.requester("tv") },
+    ) {
+        ScreensaverSettings(
+            seconds = seconds,
+            onSecondsChange = { seconds = it; prefs.screensaverSeconds = it },
+            showProgress = showProgress,
+            onShowProgressChange = { showProgress = it; prefs.screensaverShowProgress = it },
+            firstModifier = rows.row("shorter").ringToTop(right = false).focusProperties { firstCamera?.let { down = it } },
+            lastModifier = rows.row("longer").ringToTop(left = false).focusProperties { firstCamera?.let { down = it } },
+            progressModifier = rows.row("progress").ringToTop(),
+            cameras = cameras,
+            hiddenCameras = hidden,
+            onHiddenCamerasChange = { hidden = it; prefs.screensaverHiddenCameras = it },
+            cameraModifier = { index -> rows.row("screensaver:${cameras[index].id}").ringToTop(left = index == 0, right = index == cameras.lastIndex) },
+        )
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
 fun ScreensaverSettings(

@@ -94,15 +94,43 @@ data class Camera(
     // Each stream shown at 16:9 whatever its shape: substreams are often squeezed, e.g. 640×480 from a 16:9 camera
     val stretch: Boolean = false,
     val stretchSubstream: Boolean = true,
+    /** Set for a Home Assistant camera: the entity this tile plays, from Home Assistant's own stream */
+    val haEntity: String? = null,
+    /**
+     * The picture's shape, as the stream reports it once, so the Home tab can size the box to it before
+     * the first frame arrives. 0 until a stream has been seen for this camera.
+     */
+    val aspect: Float = 0f,
 ) {
     /** Address without the login, for display: e.g. 192.168.1.10 */
     val host: String get() = Uri.parse(url).host.orEmpty()
+}
+
+/** The shapes a camera can be laid out in; 0 is "Auto": follow the stream */
+val CameraAspects = listOf(0f, 16f / 9f, 4f / 3f, 1f, 5f / 4f, 21f / 9f)
+
+/** The next shape in the cycle, from whatever this camera has now */
+fun nextAspect(current: Float): Float {
+    val now = CameraAspects.indexOfFirst { kotlin.math.abs(it - current) < 0.01f }
+    return CameraAspects[(if (now < 0) 0 else now + 1) % CameraAspects.size]
+}
+
+/** A camera's shape as a menu line: "Shape: Auto" until one is chosen */
+fun aspectLabel(aspect: Float): String = when {
+    aspect <= 0f -> "Shape: Auto"
+    kotlin.math.abs(aspect - 16f / 9f) < 0.01f -> "Shape: 16:9"
+    kotlin.math.abs(aspect - 4f / 3f) < 0.01f -> "Shape: 4:3"
+    kotlin.math.abs(aspect - 1f) < 0.01f -> "Shape: 1:1"
+    kotlin.math.abs(aspect - 5f / 4f) < 0.01f -> "Shape: 5:4"
+    kotlin.math.abs(aspect - 21f / 9f) < 0.01f -> "Shape: 21:9"
+    else -> "Shape: %.2f".format(aspect)
 }
 
 fun camerasToJson(cameras: List<Camera>): String = JSONArray(
     cameras.map {
         JSONObject().put("id", it.id).put("name", it.name).put("url", it.url).put("tcp", it.useTcp).put("sub", it.substreamUrl)
             .put("audio", it.useAudio).put("subAudio", it.useSubstreamAudio)
+            .put("aspect", it.aspect.toDouble())
             .put("stretch", it.stretch).put("subStretch", it.stretchSubstream)
     },
 ).toString()
@@ -129,13 +157,6 @@ fun camerasFromJson(json: String): List<Camera> {
 // How long a camera's name shows over the picture after switching to it
 private const val NAME_SHOWN_MS = 2_000L
 
-// The channel up and down reminder: how long it shows, and how often at most
-private const val CHANNEL_HINT_SHOWN_MS = 3_000L
-private const val CHANNEL_HINT_INTERVAL_MS = 60 * 60_000L
-
-// When it last showed, for as long as the app runs
-private var lastChannelHint = 0L
-
 /**
  * The camera shown on the home screen. The remote's channel up and down switch to the next or
  * previous camera, wherever the selection is (see MainActivity), and the new camera's name shows
@@ -147,27 +168,19 @@ fun MainCamera(
     camera: Camera,
     cameras: List<Camera>,
     minimizeStreams: Boolean,
+    soundEnabled: Boolean,
+    ha: HaServer,
+    // The stream's shape, remembered per camera: the box is the right shape from the first frame
+    onAspect: (Float) -> Unit = {},
     onSelect: (Camera) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Until a stream has been seen for this camera, 16:9: the previous camera's shape is not this one's
+    val shape = remember(camera.id, camera.aspect) { camera.aspect.takeIf { it > 0f } ?: (16f / 9f) }
     var nameShown by remember { mutableStateOf(false) }
     var firstCamera by remember { mutableStateOf(true) }
     var fullScreen by remember { mutableStateOf(false) }
-
-    // The reminder that channel up and down switch cameras: as the selection lands on the camera,
-    // for a few seconds, and at most once an hour
-    var channelHint by remember { mutableStateOf(false) }
-    LaunchedEffect(focused) {
-        channelHint = false
-        if (!focused || cameras.size < 2) return@LaunchedEffect
-        val now = SystemClock.elapsedRealtime()
-        if (lastChannelHint != 0L && now - lastChannelHint < CHANNEL_HINT_INTERVAL_MS) return@LaunchedEffect
-        lastChannelHint = now
-        channelHint = true
-        delay(CHANNEL_HINT_SHOWN_MS)
-        channelHint = false
-    }
 
     LaunchedEffect(camera.id) {
         // Only when switching, not when the home screen opens
@@ -181,7 +194,10 @@ fun MainCamera(
     }
 
     Box(
-        modifier = modifier
+        modifier = Modifier
+            // Height first when the camera is taller than 16:9, so a 4:3 picture fits the space it has
+            .aspectRatio(shape, matchHeightConstraintsFirst = shape < 16f / 9f)
+            .then(modifier)
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
                 // On release: opened on the press, the full screen window would get the release and close
@@ -198,13 +214,16 @@ fun MainCamera(
             useTcp = camera.useTcp,
             modifier = Modifier.fillMaxSize(),
             minimizeStreams = minimizeStreams,
-            useAudio = camera.useAudio,
+            useAudio = soundEnabled && camera.useAudio,
             fullScreenSound = true,
+            ha = ha.takeIf { camera.haEntity != null },
+            haEntity = camera.haEntity,
             stretch = camera.stretch,
             fullScreen = fullScreen,
             onCloseFullScreen = { fullScreen = false },
             onCameraButton = { index -> cameras.getOrNull(index)?.let(onSelect) },
             onChannel = { step -> steppedCamera(cameras, camera.id, step)?.let(onSelect) },
+            onAspect = { reported -> if (reported > 0f) onAspect(reported) },
         )
         AnimatedVisibility(
             visible = nameShown,
@@ -222,14 +241,6 @@ fun MainCamera(
             )
         }
         if (focused) Box(Modifier.matchParentSize().border(3.dp, MaterialTheme.colorScheme.border, CameraShape))
-        AnimatedVisibility(
-            visible = channelHint,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
-        ) {
-            ChannelMark(Modifier)
-        }
     }
 }
 
@@ -241,34 +252,29 @@ private val OkKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
  * them to let go of their decoders.
  */
 @Composable
-fun FullScreenCamera(camera: Camera, minimizeStreams: Boolean, onCameraButton: (Int) -> Unit, onChannel: (Int) -> Unit, onClose: () -> Unit) {
+fun FullScreenCamera(
+    camera: Camera,
+    minimizeStreams: Boolean,
+    soundEnabled: Boolean,
+    ha: HaServer,
+    onCameraButton: (Int) -> Unit,
+    onChannel: (Int) -> Unit,
+    onClose: () -> Unit,
+) {
     CameraView(
         url = camera.url,
         useTcp = camera.useTcp,
         minimizeStreams = minimizeStreams,
-        useAudio = camera.useAudio,
+        useAudio = soundEnabled && camera.useAudio,
         stretch = camera.stretch,
         fullScreen = true,
+        ha = ha.takeIf { camera.haEntity != null },
+        haEntity = camera.haEntity,
         onCloseFullScreen = onClose,
         onCameraButton = onCameraButton,
         onChannel = onChannel,
         waitForOtherPlayers = minimizeStreams,
     )
-}
-
-/** Only shows that the remote's channel up and down switch cameras, like its CH rocker; the remote never lands on it */
-@Composable
-private fun ChannelMark(modifier: Modifier) {
-    Column(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        MdiIcon("mdi:chevron-up", size = 28.dp, color = Color.White)
-        Text("CH", style = MaterialTheme.typography.labelMedium, color = Color.White)
-        MdiIcon("mdi:chevron-down", size = 28.dp, color = Color.White)
-    }
 }
 
 /** Only shows that left and right switch to another camera or alert; the remote never lands on it. A dark copy behind keeps it readable over any picture. */
@@ -294,6 +300,8 @@ fun CameraGrid(
     playSubstreams: Boolean,
     minimizeStreams: Boolean,
     spareDecoder: Boolean,
+    soundEnabled: Boolean,
+    ha: HaServer,
     onSelect: (Camera) -> Unit,
     onSetUp: () -> Unit,
     modifier: Modifier = Modifier,
@@ -336,8 +344,25 @@ fun CameraGrid(
             }
         }
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            val streaming = live && liveSlots.has(camera.id, spare = if (spareDecoder) 1 else 0)
-            if (streaming) {
+            // A Home Assistant camera never opens a substream: a still from Home Assistant is the cheap
+            // path, and one live picture is what Home Assistant can afford
+            val streaming = camera.haEntity == null && live && liveSlots.has(camera.id, spare = if (spareDecoder) 1 else 0)
+            if (camera.haEntity != null) {
+                // A still from Home Assistant is the picture, not a failure: the red X stays away
+                val still = rememberHaCameraStill(ha, camera.haEntity)
+                Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                    if (still != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = still,
+                            contentDescription = camera.name,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Text("No picture", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            } else if (streaming) {
                 CameraView(
                     url = camera.substreamUrl,
                     useTcp = camera.useTcp,
@@ -345,8 +370,10 @@ fun CameraGrid(
                     compact = true,
                     fallbackPictureUrl = camera.url,
                     minimizeStreams = minimizeStreams,
-                    useAudio = camera.useSubstreamAudio,
+                    useAudio = soundEnabled && camera.useSubstreamAudio,
                     stretch = camera.stretchSubstream,
+                    ha = ha.takeIf { camera.haEntity != null },
+                    haEntity = camera.haEntity,
                     onLiveChange = { playing = it },
                 )
             } else {
@@ -385,7 +412,9 @@ fun CameraGrid(
                     .padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = 34.dp),
             )
             // Over the name's shade, which would dim it
-            if (!streaming || !playing) NotLiveMark(Modifier.align(Alignment.BottomEnd).padding(6.dp))
+            if (camera.haEntity == null && (!streaming || !playing)) {
+                NotLiveMark(Modifier.align(Alignment.BottomEnd).padding(6.dp))
+            }
         }
     }
 }
@@ -537,10 +566,6 @@ fun CamerasDialog(
     val advancedOption = remember { FocusRequester() }
     val context = LocalContext.current
     val prefs = remember { LauncherPrefs(context) }
-    var screensaverSeconds by remember { mutableIntStateOf(prefs.screensaverSeconds) }
-    var screensaverShowProgress by remember { mutableStateOf(prefs.screensaverShowProgress) }
-    var screensaverHidden by remember { mutableStateOf(prefs.screensaverHiddenCameras) }
-    val hasScreensaverSettings = remember { context.screensaverScreen() != null }
     var editing by remember { mutableStateOf<Camera?>(null) }
     var testing by remember { mutableStateOf<Camera?>(null) }
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -559,7 +584,6 @@ fun CamerasDialog(
     // The camera last selected: the top row comes back to it
     fun currentItem() = when (tab) {
         CamerasTab.List -> rows.currentOrNull(cameras.map { it.id })
-        CamerasTab.Screensaver -> advancedItems.current(listOf("shorter", "longer") + cameras.map { "screensaver:${it.id}" } + "progress")
         CamerasTab.Advanced -> advancedItems.current(listOf("substreams", "minimize"))
     }
 
@@ -604,14 +628,11 @@ fun CamerasDialog(
         onDismiss = onDismiss,
         tabs = listOf(
             DialogTab("Cameras", selected = tab == CamerasTab.List) { tab = CamerasTab.List },
-            DialogTab("Screensaver", selected = tab == CamerasTab.Screensaver) { tab = CamerasTab.Screensaver },
             DialogTab("Advanced", selected = advanced) { tab = CamerasTab.Advanced },
         ),
         buttons = listOfNotNull(
             DialogButton("Add camera", primary = true, focus = addButton) { editing = Camera(name = "", url = "") }.takeIf { tab == CamerasTab.List },
             // Without a screensaver screen to open, the TV's main settings open
-            DialogButton(if (hasScreensaverSettings) "TV screensaver settings" else "TV settings", onClick = context::openScreensaverSettings)
-                .takeIf { tab == CamerasTab.Screensaver },
         ),
         contentFocus = ::currentItem,
         closeFocus = closeButton,
@@ -624,35 +645,6 @@ fun CamerasDialog(
                 onMinimizeStreamsChange = onMinimizeStreamsChange,
                 modifier = Modifier.focusRequester(advancedOption).then(advancedItems.row("substreams")).ringToTop(),
                 lastModifier = advancedItems.row("minimize").ringToTop(),
-            )
-            return@TopDialog
-        }
-        if (tab == CamerasTab.Screensaver) {
-            val firstScreensaverCamera = cameras.firstOrNull()?.let { advancedItems.requester("screensaver:${it.id}") }
-            ScreensaverSettings(
-                seconds = screensaverSeconds,
-                onSecondsChange = {
-                    screensaverSeconds = it
-                    prefs.screensaverSeconds = it
-                },
-                showProgress = screensaverShowProgress,
-                onShowProgressChange = {
-                    screensaverShowProgress = it
-                    prefs.screensaverShowProgress = it
-                },
-                // Down from the time goes to the first camera, on the left, not straight down past them
-                firstModifier = advancedItems.row("shorter").ringToTop(right = false).focusProperties { firstScreensaverCamera?.let { down = it } },
-                lastModifier = advancedItems.row("longer").ringToTop(left = false).focusProperties { firstScreensaverCamera?.let { down = it } },
-                progressModifier = advancedItems.row("progress").ringToTop(),
-                cameras = cameras,
-                hiddenCameras = screensaverHidden,
-                onHiddenCamerasChange = {
-                    screensaverHidden = it
-                    prefs.screensaverHiddenCameras = it
-                },
-                cameraModifier = { index ->
-                    advancedItems.row("screensaver:${cameras[index].id}").ringToTop(left = index == 0, right = index == cameras.lastIndex)
-                },
             )
             return@TopDialog
         }
@@ -700,6 +692,13 @@ fun CamerasDialog(
                             title = camera.name,
                             actions = listOfNotNull(
                                 MenuAction("Edit") { editing = camera },
+                                // The shape the Home tab lays it out in: learned, or chosen here
+                                MenuAction(aspectLabel(camera.aspect)) {
+                                    onChange(cameras.map {
+                                        if (it.id == camera.id) it.copy(aspect = nextAspect(camera.aspect)) else it
+                                    })
+                                    menuFor = null
+                                },
                                 MenuAction("Test") { testing = camera },
                                 MenuAction("Move") {
                                     moveOrder = cameras
@@ -748,7 +747,7 @@ fun CamerasDialog(
     }
 }
 
-private enum class CamerasTab { List, Screensaver, Advanced }
+private enum class CamerasTab { List, Advanced }
 
 @Composable
 private fun CameraAdvancedSettings(

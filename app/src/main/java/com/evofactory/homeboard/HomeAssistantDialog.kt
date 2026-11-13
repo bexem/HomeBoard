@@ -46,8 +46,30 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 
-/** The tabs once connected: the dashboard first, as it decides what the others are for, then choosing sensors and actions, and their order */
-private enum class HaTab(val label: String) { Home("Home Tab"), Dashboard("HA Tab"), Sensors("Sensors"), Actions("Actions"), Order("Order") }
+/**
+ * The parts of the Home Assistant settings. Each is opened by its own row in the settings page, so the
+ * dialog shows one at a time and says which: there is no tab bar to work out ("HA Tab" was a name
+ * nobody could read — it meant the Assistant tab's layout).
+ */
+enum class HaDialogTab(val label: String) {
+    /** What the Assistant tab shows: the chosen devices, or one of Home Assistant's dashboards */
+    Dashboard("Assistant tab · what it shows"),
+
+    /** The Assistant tab's own devices */
+    Sensors("Assistant tab · devices"),
+
+    /** The same two choices for the Home tab's panel, next to the camera */
+    Home("Home tab · what it shows"),
+
+    /** The Home tab's own devices: its own list, or a copy of the Assistant tab's */
+    HomeDevices("Home tab · devices"),
+
+    /** Which of the tab's devices also sit in the top bar */
+    Actions("Top bar"),
+
+    /** Their order */
+    Order("Order"),
+}
 
 /**
  * Home Assistant settings, in two steps: the address and how to log in (username and password, or
@@ -66,10 +88,23 @@ fun HomeAssistantDialog(
     initialServer: HaServer,
     initialUsername: String,
     initialEntities: List<String>,
+    // What the Home tab's panel shows beside the camera: its own choice, a subset of [initialEntities]
+    initialHomeEntities: List<String>,
     initialTopBar: List<String>,
     initialDisplay: HaDisplay,
     loginRejected: Boolean,
-    onSave: (server: HaServer, username: String, entities: List<String>, topBar: List<String>, display: HaDisplay) -> Unit,
+    // Which tab the settings page opened: the first, unless a row asked for its own
+    initialTab: HaDialogTab = HaDialogTab.Home,
+    // Opened from the connection row: the address and login first, whatever the saved login is
+    connectionFirst: Boolean = false,
+    onSave: (
+        server: HaServer,
+        username: String,
+        entities: List<String>,
+        homeEntities: List<String>,
+        topBar: List<String>,
+        display: HaDisplay,
+    ) -> Unit,
     onLogOut: () -> Unit,
     onDiscardLogin: (HaServer) -> Unit,
     onDismiss: () -> Unit,
@@ -89,17 +124,21 @@ fun HomeAssistantDialog(
     var code by remember { mutableStateOf("") }
     // Everything chosen, in its order on the Assistant tab, and the actions also in the top bar
     var selected by remember { mutableStateOf(initialEntities) }
+    // Its own list: picking here does not change the Assistant tab, and a device can sit beside the
+    // camera without being on the tab
+    var homeSelected by remember { mutableStateOf(initialHomeEntities) }
     var topBar by remember { mutableStateOf(initialTopBar.filter { it in initialEntities }) }
     // The dashboard the Assistant tab shows (see [HaDashboardInfo.key]), null for the choice above,
     // and Home Assistant's dashboards, each read if it can be
-    var dashboard by remember { mutableStateOf(initialDisplay.dashboard) }
-    // The alerts, apps and Continue Watching below the Assistant tab's cards
-    var bottomRow by remember { mutableStateOf(initialDisplay.bottomRow) }
-    // Each section in a column of its own on the Assistant tab
-    var sectionColumns by remember { mutableStateOf(initialDisplay.sectionColumns) }
-    // The same for the Home tab's panel, next to the camera
-    var homeDashboard by remember { mutableStateOf(initialDisplay.homeDashboard) }
-    var homeColumns by remember { mutableStateOf(initialDisplay.homeColumns) }
+    // Null is the chosen entities, "" Home Assistant's own default dashboard: two different choices,
+    // and the list offers both, so they cannot share a value
+    val initialDashboard = initialDisplay.dashboard?.let(::canonicalDashboardKey)
+    var dashboard by remember { mutableStateOf(initialDashboard) }
+    // The same for the Home tab's panel, next to the camera. The switches the tabs used to carry
+    // (bottom row, columns) are rows in the settings page, so Save keeps whatever [initialDisplay]
+    // holds for them instead of writing a stale copy back.
+    val initialHomeDashboard = initialDisplay.homeDashboard?.let(::canonicalDashboardKey)
+    var homeDashboard by remember { mutableStateOf(initialHomeDashboard) }
     var boards by remember { mutableStateOf<List<Pair<HaDashboardInfo, HaDashboard?>>>(emptyList()) }
     // The connected Home Assistant and what can be picked on it; set = second step, choosing
     var connected by remember { mutableStateOf<HaServer?>(null) }
@@ -107,11 +146,13 @@ fun HomeAssistantDialog(
     var connecting by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     // Logging in here, rather than using the saved login
-    var showLogin by remember { mutableStateOf(!initialServer.isSet || loginRejected) }
-    var tab by remember { mutableStateOf(HaTab.Home) }
+    var showLogin by remember { mutableStateOf(connectionFirst || !initialServer.isSet || loginRejected) }
+    // Which part the row asked for; nothing else can change it
+    val tab = initialTab
     // The Order tab's row being moved, if any
     var movingKey by remember { mutableStateOf<String?>(null) }
     var sensorQuery by remember { mutableStateOf("") }
+    var homeDeviceQuery by remember { mutableStateOf("") }
     var actionQuery by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -121,16 +162,30 @@ fun HomeAssistantDialog(
     val connectButton = remember { FocusRequester() }
     val closeButton = remember { FocusRequester() }
     val sensorSearch = remember { FocusRequester() }
+    val homeDeviceSearch = remember { FocusRequester() }
+    val syncButton = remember { FocusRequester() }
     val actionSearch = remember { FocusRequester() }
     // To come back to the item last on, from the top row
     val loginFocus = remember { ListFocus() }
     val sensorFocus = remember { ListFocus() }
+    val homeDeviceFocus = remember { ListFocus() }
     val actionFocus = remember { ListFocus() }
     val dashboardFocus = remember { ListFocus() }
     val homeFocus = remember { ListFocus() }
     val orderFocus = remember { ListFocus() }
     // Without a password, the saved login is used (if it's for this username)
     val reuseLogin = password.isEmpty() && refreshToken.isNotEmpty() && username.trim() == loginUsername
+    // Anything the Save button would write, and nothing else: its fill says whether there is. The
+    // address is compared as it is saved (normalised), so connecting does not count as a change
+    val initialUrl = normalizeHaUrl(initialServer.url) ?: initialServer.url
+    val dirty = url != initialUrl ||
+        token != initialServer.token ||
+        refreshToken != (if (loginRejected) "" else initialServer.refreshToken) ||
+        selected != initialEntities ||
+        homeSelected != initialHomeEntities ||
+        topBar != initialTopBar.filter { it in initialEntities } ||
+        dashboard != initialDashboard ||
+        homeDashboard != initialHomeDashboard
     val canConnect = normalizeHaUrl(url) != null && when {
         useToken -> token.isNotBlank()
         codeFlow != null -> code.isNotBlank()
@@ -181,6 +236,12 @@ fun HomeAssistantDialog(
                     getStates() to dashboards().map { it to parseDashboard(dashboardConfig(it.urlPath)) }
                 }
                 boards = found
+                // Which dashboards the choice lists, and under which key: two with one URL path
+                // would read as one selectable entry
+                AppLog.i(
+                    "HA",
+                    "Dashboards: " + found.joinToString { "${it.first.key.ifEmpty { "<default>" }}|${it.first.title}" },
+                )
                 available = states
                     .filter { it.isPickable }
                     .sortedBy { it.name.lowercase() }
@@ -372,61 +433,95 @@ fun HomeAssistantDialog(
     // What was chosen before comes first, so it can be seen in a long list. Not what's chosen
     // now: items would jump around while choosing
     val sensorSections = pickerSections(entities.filterNot { it.isAction }, sensorQuery, initialEntities)
+    val homeDeviceSections = pickerSections(entities.filterNot { it.isAction }, homeDeviceQuery, homeSelected)
     val actionSections = pickerSections(entities.filter { it.isAction }, actionQuery, initialEntities)
     val orderRows = orderRows(selected, topBar, byId)
     fun keysOf(sections: List<Pair<String, List<HaEntity>>>) = sections.flatMap { (_, items) -> items.map { it.id } }
+    // The item last on, if still listed; otherwise the first in the order shown, or the search
+    val firstInSection: () -> FocusRequester? = {
+        when (tab) {
+            HaDialogTab.Sensors -> sensorFocus.currentOrNull(keysOf(sensorSections)) ?: sensorSearch
+            HaDialogTab.HomeDevices -> homeDeviceFocus.currentOrNull(keysOf(homeDeviceSections)) ?: homeDeviceSearch
+            HaDialogTab.Actions -> actionFocus.currentOrNull(keysOf(actionSections)) ?: actionSearch
+            HaDialogTab.Order -> orderFocus.currentOrNull(orderRows.filter { it.focusable }.map { it.key })
+            HaDialogTab.Dashboard -> dashboardFocus.currentOrNull(listOf(MY_SELECTION) + boards.map { it.first.key })
+            HaDialogTab.Home -> homeFocus.currentOrNull(listOf(MY_SELECTION) + boards.map { it.first.key })
+        }
+    }
 
     TopDialog(
-        title = "Home Assistant",
-        // Room for its five tabs, Log out, Save and the X
+        // One part, named in the title: the rows that open it say the same words
+        title = "Home Assistant · ${tab.label}",
         width = 720.dp,
         onDismiss = onDismiss,
-        tabs = HaTab.entries.map { DialogTab(it.label, selected = it == tab) { tab = it } },
-        buttons = listOf(
+        openFocus = firstInSection,
+        buttons = listOfNotNull(
+            // The Home tab can copy the Assistant tab's devices instead of being picked twice
+            if (tab == HaDialogTab.HomeDevices) {
+                DialogButton("Same as the Assistant tab", focus = syncButton) {
+                    homeSelected = selected.filterNot(::isHaAction)
+                }
+            } else {
+                null
+            },
             logOutButton,
-            DialogButton("Save", primary = true) {
+            DialogButton("Save", primary = true, highlight = dirty) {
                 // Drops entities that no longer exist
                 val ids = entities.map { it.id }.toSet()
                 val chosen = selected.filter { it in ids }
-                onSave(server, if (server.refreshToken.isEmpty()) "" else loginUsername, chosen, topBar.filter { it in chosen },
-                    HaDisplay(dashboard, bottomRow, sectionColumns, homeDashboard, homeColumns),
+                val homeChosen = homeSelected.filter { it in ids }
+                onSave(
+                    server,
+                    if (server.refreshToken.isEmpty()) "" else loginUsername,
+                    chosen,
+                    homeChosen,
+                    topBar.filter { it in chosen },
+                    initialDisplay.copy(dashboard = dashboard, homeDashboard = homeDashboard),
                 )
                 unsavedLogin = null
                 onDismiss()
             },
         ),
-        // The item last on, if still listed; otherwise the first in the order shown, or the search
-        contentFocus = {
-            when (tab) {
-                HaTab.Sensors -> sensorFocus.currentOrNull(keysOf(sensorSections)) ?: sensorSearch
-                HaTab.Actions -> actionFocus.currentOrNull(keysOf(actionSections)) ?: actionSearch
-                HaTab.Order -> orderFocus.currentOrNull(orderRows.filter { it.focusable }.map { it.key })
-                HaTab.Dashboard -> dashboardFocus.currentOrNull(listOf(MY_SELECTION) + boards.map { it.first.key } + BOTTOM_ROW + SECTION_COLUMNS)
-                HaTab.Home -> homeFocus.currentOrNull(listOf(MY_SELECTION) + boards.map { it.first.key } + SECTION_COLUMNS)
-            }
-        },
+        contentFocus = firstInSection,
         searchFocus = {
             when (tab) {
-                HaTab.Sensors -> sensorSearch
-                HaTab.Actions -> actionSearch
-                HaTab.Order, HaTab.Dashboard, HaTab.Home -> null
+                HaDialogTab.Sensors -> sensorSearch
+                HaDialogTab.HomeDevices -> homeDeviceSearch
+                HaDialogTab.Actions -> actionSearch
+                HaDialogTab.Order, HaDialogTab.Dashboard, HaDialogTab.Home -> null
             }
         },
         hint = when (tab) {
-            HaTab.Sensors -> "OK selects · ${selected.count { !isHaAction(it) }} chosen"
-            HaTab.Actions -> "OK: top bar → chosen → off · ${selected.count(::isHaAction)} chosen · " +
+            HaDialogTab.Sensors -> "OK selects · ${selected.count { !isHaAction(it) }} chosen"
+            HaDialogTab.HomeDevices -> if (homeSelected == selected.filterNot(::isHaAction)) {
+                "Same as the Assistant tab · OK selects · ${homeSelected.size} beside the camera"
+            } else {
+                "OK selects · ${homeSelected.size} beside the camera · the first button copies the Assistant tab's list"
+            }
+            HaDialogTab.Actions -> "OK: top bar → chosen → off · ${selected.count(::isHaAction)} chosen · " +
                 "${topBar.size} of $MAX_HA_ACTIONS in the top bar"
-            HaTab.Order -> when {
+            HaDialogTab.Order -> when {
                 orderRows.isEmpty() -> null
                 movingKey != null -> "Up and down move it · OK keeps it there · Back cancels"
                 else -> "OK on a card's title moves the card, OK on an item moves it within its card"
             }
-            HaTab.Dashboard -> "OK chooses what the Assistant tab shows, or turns a switch on or off · the top bar keeps your choice"
-            HaTab.Home -> "OK chooses what the Home tab shows next to the camera, or turns a switch on or off"
+            HaDialogTab.Dashboard -> "OK chooses what the Assistant tab shows · the top bar keeps your choice · its layout is in the settings page's Assistant category"
+            HaDialogTab.Home -> "OK chooses what the Home tab shows next to the camera · its layout is in the settings page's Assistant category"
         },
     ) {
         when (tab) {
-            HaTab.Sensors -> EntityPicker(
+            HaDialogTab.HomeDevices -> EntityPicker(
+                sections = homeDeviceSections,
+                query = homeDeviceQuery,
+                onQueryChange = { homeDeviceQuery = it },
+                search = homeDeviceSearch,
+                rows = homeDeviceFocus,
+                mark = { if (it.id in homeSelected) "✓" else "" },
+                onPress = { entity ->
+                    homeSelected = if (entity.id in homeSelected) homeSelected - entity.id else homeSelected + entity.id
+                },
+            )
+            HaDialogTab.Sensors -> EntityPicker(
                 sections = sensorSections,
                 query = sensorQuery,
                 onQueryChange = { sensorQuery = it },
@@ -437,7 +532,7 @@ fun HomeAssistantDialog(
                     selected = if (entity.id in selected) selected - entity.id else selected + entity.id
                 },
             )
-            HaTab.Actions -> EntityPicker(
+            HaDialogTab.Actions -> EntityPicker(
                 sections = actionSections,
                 query = actionQuery,
                 onQueryChange = { actionQuery = it },
@@ -463,29 +558,21 @@ fun HomeAssistantDialog(
                     }
                 },
             )
-            HaTab.Dashboard -> DashboardChoice(
+            HaDialogTab.Dashboard -> DashboardChoice(
                 boards = boards,
                 chosen = dashboard,
                 onChoose = { dashboard = it },
-                selectionDetail = "The sensors and actions chosen in the other tabs, in the Order tab's order, by room",
-                bottomRow = bottomRow,
-                onBottomRowChange = { bottomRow = it },
-                sectionColumns = sectionColumns,
-                onSectionColumnsChange = { sectionColumns = it },
+                selectionDetail = "The sensors and actions chosen in Devices, in the order the Order part sets, by room",
                 rowModifier = { key -> dashboardFocus.row(key).ringToTop() },
             )
-            HaTab.Home -> DashboardChoice(
+            HaDialogTab.Home -> DashboardChoice(
                 boards = boards,
                 chosen = homeDashboard,
                 onChoose = { homeDashboard = it },
-                selectionDetail = "The weather and sensors chosen in the other tabs; OK on them opens the Assistant tab",
-                bottomRow = null,
-                onBottomRowChange = {},
-                sectionColumns = homeColumns,
-                onSectionColumnsChange = { homeColumns = it },
+                selectionDetail = "The weather and sensors chosen in Devices; OK on them opens the Assistant tab",
                 rowModifier = { key -> homeFocus.row(key).ringToTop() },
             )
-            HaTab.Order -> SensorOrder(
+            HaDialogTab.Order -> SensorOrder(
                 rows = orderRows,
                 ids = selected,
                 movingKey = movingKey,
@@ -530,7 +617,7 @@ private fun pickerSections(entities: List<HaEntity>, query: String, first: List<
         add("Weather" to listed.filter { it.domain == "weather" })
         byRoom.keys.filterNotNull().sortedBy { it.lowercase() }.forEach { add(it to byRoom.getValue(it)) }
         noRoom.map { haEntityType(it.id) }.distinct().sortedBy { TypeOrder.indexOf(it).takeIf { i -> i >= 0 } ?: TypeOrder.size }.forEach { type ->
-            add(sensorTypeTitle(type, anyRoom) to noRoom.filter { haEntityType(it.id) == type })
+            add(sensorTypeTitle(type) to noRoom.filter { haEntityType(it.id) == type })
         }
     }.filter { (_, items) -> items.isNotEmpty() }
 }
@@ -647,8 +734,8 @@ private const val MY_SELECTION = "my selection"
  * The Home Tab and HA Tab tabs: the selection made in the other tabs (as [selectionDetail] says),
  * or one of Home Assistant's [boards], each with what it can show. OK [onChoose]s one, by its key
  * (null for the selection). Those with nothing that can be shown aren't offered, unless chosen
- * already. Below them, switches for the [bottomRow] (alerts, apps, Continue Watching) below the
- * Assistant tab's cards, unless null, and for [sectionColumns].
+ * already. Nothing else lives here: the switches for the bottom row and the columns are rows in the
+ * settings page's Assistant category, so there is one editor for each setting.
  */
 @Composable
 private fun DashboardChoice(
@@ -656,10 +743,6 @@ private fun DashboardChoice(
     chosen: String?,
     onChoose: (String?) -> Unit,
     selectionDetail: String,
-    bottomRow: Boolean?,
-    onBottomRowChange: (Boolean) -> Unit,
-    sectionColumns: Boolean,
-    onSectionColumnsChange: (Boolean) -> Unit,
     rowModifier: (key: String) -> Modifier,
 ) {
     LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 4.dp)) {
@@ -684,36 +767,12 @@ private fun DashboardChoice(
             }
             ChoiceRow(info.title, detail, checked = chosen == info.key, modifier = rowModifier(info.key)) { onChoose(info.key) }
         }
-        if (bottomRow != null) {
-            item(key = BOTTOM_ROW) {
-                ChoiceRow(
-                    "Show bottom row (Alerts / Apps / Continue watching)",
-                    "Below the cards, as on the other tabs. Off: the cards take the whole height.",
-                    checked = bottomRow,
-                    switch = true,
-                    modifier = rowModifier(BOTTOM_ROW).padding(top = 8.dp),
-                ) { onBottomRowChange(!bottomRow) }
-            }
-        }
-        item(key = SECTION_COLUMNS) {
-            ChoiceRow(
-                "Display sections as columns",
-                "Each section in a column of its own, scrolling sideways. Off: the sections fill as many columns as fit.",
-                checked = sectionColumns,
-                switch = true,
-                modifier = rowModifier(SECTION_COLUMNS).then(if (bottomRow == null) Modifier.padding(top = 8.dp) else Modifier),
-            ) { onSectionColumnsChange(!sectionColumns) }
-        }
     }
 }
 
-// The rows of the switches, after the dashboards
-private const val BOTTOM_ROW = "bottom_row"
-private const val SECTION_COLUMNS = "section_columns"
-
-/** A row to choose, with a line saying more under its title, and a check mark when [checked], or a [switch] on when it is */
+/** A row to choose, with a line saying more under its title, and a check mark when [checked] */
 @Composable
-private fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier: Modifier, switch: Boolean = false, onClick: () -> Unit) {
+private fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -741,11 +800,7 @@ private fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier:
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (switch) {
-                SwitchMark(checked, LocalContentColor.current)
-            } else {
-                Text(if (checked) "✓" else "", style = MaterialTheme.typography.bodyMedium)
-            }
+            Text(if (checked) "✓" else "", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

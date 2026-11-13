@@ -104,6 +104,15 @@ class HaConnection {
         missingDashboards.keys.retainAll(keys.toSet())
     }
 
+    // Calendar events by entity id: the last read stays while reconnecting
+    val calendarEvents = mutableStateMapOf<String, List<HaEvent>>()
+    // A Home Assistant that can't answer calendar/get_events: the card stays away rather than nag
+    var calendarsUnsupported by mutableStateOf(false)
+        internal set
+    // Set once the calendars have been asked, so "Connecting" only covers the first wait
+    var calendarsLoaded by mutableStateOf(false)
+        internal set
+
     // Weather forecasts by entity id
     val hourly = mutableStateMapOf<String, List<HaForecast>>()
     val daily = mutableStateMapOf<String, List<HaForecast>>()
@@ -113,6 +122,45 @@ class HaConnection {
     // The scene, script or button running: one at a time, from the top bar or the Assistant tab
     var runningAction by mutableStateOf<String?>(null)
         private set
+
+    /** Arms or disarms an alarm; the code is passed through and never stored */
+    fun alarm(id: String, action: String, code: String?, scope: CoroutineScope, context: Context) {
+        val session = session ?: return notConnected(context)
+        scope.launch {
+            try {
+                session.alarm(id, action, code)
+            } catch (e: HaException) {
+                Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** A light or fan's level, in percent, if Home Assistant is connected; failures show as a toast */
+    fun setLevel(id: String, percent: Int, scope: CoroutineScope, context: Context) {
+        val session = session ?: return notConnected(context)
+        scope.launch {
+            try {
+                when (id.substringBefore('.')) {
+                    "fan" -> session.setPercentage(id, percent)
+                    else -> session.setBrightness(id, percent)
+                }
+            } catch (e: HaException) {
+                Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** Drives a vacuum: "start", "pause" or "return_to_base"; a failure shows as a toast */
+    fun vacuum(id: String, service: String, scope: CoroutineScope, context: Context) {
+        val session = session ?: return notConnected(context)
+        scope.launch {
+            try {
+                session.vacuum(id, service)
+            } catch (e: HaException) {
+                Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     /** Switches [id] on or off, if Home Assistant is connected; a failure shows as a toast. Its new state comes back with its updates. */
     fun toggle(id: String, scope: CoroutineScope, context: Context) {
@@ -179,11 +227,18 @@ class HaConnection {
  * Home Assistant, to show the new one.
  */
 @Composable
-fun rememberHaConnection(server: HaServer, entityIds: List<String>, dashboards: List<String>): HaConnection {
+fun rememberHaConnection(
+    server: HaServer,
+    entityIds: List<String>,
+    dashboards: List<String>,
+    calendarEntities: List<String> = emptyList(),
+    calendarDays: Int = CALENDAR_DAYS_DEFAULT,
+    calendarRefreshMinutes: Int = CALENDAR_REFRESH_DEFAULT,
+): HaConnection {
     val connection = remember(server) { HaConnection() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    LaunchedEffect(server, entityIds, dashboards) {
+    LaunchedEffect(server, entityIds, dashboards, calendarEntities, calendarDays, calendarRefreshMinutes) {
         connection.keepDashboards(dashboards)
         if (!server.isSet || (entityIds.isEmpty() && dashboards.isEmpty())) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -210,8 +265,23 @@ fun rememberHaConnection(server: HaServer, entityIds: List<String>, dashboards: 
                         connection.problem = null
                         connection.failedConnections = 0
                         try {
-                            saved.await()
-                            reload = true
+                            // A child of this session: it polls for as long as the connection lives
+                            val calendars = if (calendarEntities.isEmpty()) {
+                                null
+                            } else {
+                                launch {
+                                    while (true) {
+                                        refreshCalendars(connection, server, calendarEntities, calendarDays)
+                                        delay(calendarRefreshMinutes * 60_000L)
+                                    }
+                                }
+                            }
+                            try {
+                                saved.await()
+                                reload = true
+                            } finally {
+                                calendars?.cancel()
+                            }
                         } finally {
                             connection.session = null
                             connection.connectedAt = null
@@ -234,6 +304,35 @@ fun rememberHaConnection(server: HaServer, entityIds: List<String>, dashboards: 
 }
 
 /**
+ * Reads [entityIds]' events for the next [days] days into [connection]. A calendar this Home
+ * Assistant rejects marks calendars unsupported for the rest of the connection: either the server is
+ * too old for `calendar/get_events` or a calendar has gone, and neither is something a TV can fix.
+ */
+private suspend fun refreshCalendars(
+    connection: HaConnection,
+    server: HaServer,
+    entityIds: List<String>,
+    days: Int,
+) {
+    // From the start of today, not this minute: an event already under way (or all of today's
+    // all-day ones) is still part of today, and Home Assistant leaves out what started earlier
+    val start = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+    val end = start.plusDays(days.toLong())
+    for (id in entityIds) {
+        val events = haCalendarEvents(server, id, start.toInstant(), end.toInstant())
+        if (events == null) {
+            // The command or the calendar was refused: no card is better than an error nobody can fix
+            AppLog.w("Calendar", "$id didn't answer calendar/get_events")
+            connection.calendarsUnsupported = true
+        } else {
+            AppLog.i("Calendar", "$id: ${events.size} events in ${days} days")
+            connection.calendarEvents[id] = events
+        }
+    }
+    connection.calendarsLoaded = true
+}
+
+/**
  * Home Assistant tiles: the weather, then sensor readings in the Assistant tab's cards, one after
  * the other. OK on a tile [onOpen]s that tab, which has room for them all. [sensorsFocus] selects
  * the sensors; up from the top tile goes to [upFocus]. A rejected login shows a button to
@@ -243,6 +342,11 @@ fun rememberHaConnection(server: HaServer, entityIds: List<String>, dashboards: 
 fun HomeAssistantPanel(
     connection: HaConnection,
     entityIds: List<String>,
+    calendar: CalendarConfig,
+    showSensors: Boolean,
+    // This session's card order: the same seed shows the same order until it is rolled again
+    cardSeed: Int = 0,
+    shuffleCards: Boolean = false,
     sensorsFocus: FocusRequester,
     upFocus: FocusRequester,
     onLogIn: () -> Unit,
@@ -261,7 +365,12 @@ fun HomeAssistantPanel(
     }
     val entities = connection.entities
     // The weather has its own tiles, above
-    val cards = sensorCards(entityIds.filterNot(::isHaWeather), entities)
+    val cards = Shuffle.order(
+        sensorCards(entityIds.filterNot(::isHaWeather), entities),
+        cardSeed,
+        shuffleCards,
+        salt = 3,
+    )
     val weatherIds = entityIds.filter(::isHaWeather)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         weatherIds.forEachIndexed { index, id ->
@@ -275,6 +384,18 @@ fun HomeAssistantPanel(
                 WeatherReading(entities[id], connection.hourly[id], connection.daily[id])
             }
         }
+        // Between the weather and the sensors: the next events. With the sensors card hidden it takes
+        // the rest of the panel, and the top bar's way in lands on it instead
+        CalendarCard(
+            connection = connection,
+            config = calendar,
+            onOpen = onOpen,
+            upFocus = if (weatherIds.isEmpty()) upFocus else null,
+            expanded = !showSensors,
+            focus = if (showSensors) null else sensorsFocus,
+            modifier = if (showSensors) Modifier else Modifier.weight(1f),
+        )
+        if (!showSensors) return@Column
         // Takes all the height left, however many sensors there are; those that don't fit fade out
         val cardColor = MaterialTheme.colorScheme.surfaceVariant
         Box(

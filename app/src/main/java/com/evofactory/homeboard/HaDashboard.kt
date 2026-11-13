@@ -41,8 +41,18 @@ data class HaDisplay(
     val dashboards get() = listOfNotNull(dashboard, homeDashboard).distinct()
 }
 
+/**
+ * The url path Home Assistant answers its own default dashboard on. Its dashboard list still reports
+ * that dashboard, under this path, next to the one the launcher adds for it: choosing the listed copy
+ * would choose the default one again, with the same content.
+ */
+const val HA_DEFAULT_DASHBOARD_PATH = "lovelace"
+
+/** [key] as the dashboards list offers it: the default dashboard is "", never its reserved path */
+fun canonicalDashboardKey(key: String): String = if (key == HA_DEFAULT_DASHBOARD_PATH) "" else key
+
 /** The dashboard [key] as Home Assistant's lovelace/config wants it: no url path for the default one */
-fun dashboardUrlPath(key: String): String? = key.ifEmpty { null }
+fun dashboardUrlPath(key: String): String? = canonicalDashboardKey(key).ifEmpty { null }
 
 /**
  * Reads a dashboard's layout as Home Assistant stores it ([config]) into cards for the Assistant

@@ -36,8 +36,17 @@ import java.io.File
  * "This TV's folders" is the launcher's own browser, which works on TVs whose picker is a stub.
  * "App folder" needs no interaction at all: it is where `adb push` can always write.
  */
+/** The name the document provider knows a picked file by; null when it won't say */
+private fun displayName(context: android.content.Context, uri: Uri): String? =
+    context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+
 @Composable
-fun importSettings(onImport: (SettingsFile) -> Unit, onBrowseFiles: () -> Unit, onDismiss: () -> Unit) {
+fun importSettings(
+    onImport: (SettingsFile, String) -> Unit,
+    onBrowseFiles: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -47,7 +56,12 @@ fun importSettings(onImport: (SettingsFile) -> Unit, onBrowseFiles: () -> Unit, 
         }
         scope.launch {
             val file = withContext(Dispatchers.IO) { runCatching { readSettings(context, uri) }.onFailure { AppLog.w("Settings", "Can't read the settings file", it) }.getOrNull() }
-            if (file != null) onImport(file) else Toast.makeText(context, "That file isn't a settings file", Toast.LENGTH_LONG).show()
+            val name = withContext(Dispatchers.IO) { runCatching { displayName(context, uri) }.getOrNull() }
+            if (file != null) {
+                onImport(file, name ?: "the chosen file")
+            } else {
+                Toast.makeText(context, "That file isn't a settings file", Toast.LENGTH_LONG).show()
+            }
             onDismiss()
         }
     }
@@ -65,8 +79,13 @@ fun importSettings(onImport: (SettingsFile) -> Unit, onBrowseFiles: () -> Unit, 
         TransferRow("Browse this TV's folders", "For TVs whose file picker is only a stub") { onBrowseFiles() }
         TransferRow("From the app folder", "For a file pushed to this app's folder with adb") {
             scope.launch {
-                val file = withContext(Dispatchers.IO) { newestSettingsFile(context)?.let { readSettings(context, it) } }
-                if (file != null) onImport(file) else Toast.makeText(context, "No settings file in the app folder", Toast.LENGTH_LONG).show()
+                val fromFolder = withContext(Dispatchers.IO) { newestSettingsFile(context) }
+                val file = fromFolder?.let { withContext(Dispatchers.IO) { readSettings(context, it) } }
+                if (file != null) {
+                    onImport(file, fromFolder.name)
+                } else {
+                    Toast.makeText(context, "No settings file in the app folder", Toast.LENGTH_LONG).show()
+                }
                 onDismiss()
             }
         }

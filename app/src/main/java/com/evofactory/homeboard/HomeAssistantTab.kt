@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -71,6 +74,8 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -113,7 +118,6 @@ class SensorCard(
  * entity is under its type.
  */
 fun sensorCards(ids: List<String>, entities: Map<String, HaEntity>): List<SensorCard> {
-    val anyRoom = ids.any { !isHaWeather(it) && entities[it]?.area != null }
     return ids
         .groupBy { id ->
             when {
@@ -125,23 +129,27 @@ fun sensorCards(ids: List<String>, entities: Map<String, HaEntity>): List<Sensor
             val first = cardIds.first()
             val title = when {
                 isHaWeather(first) -> entities[first]?.name ?: "Weather"
-                else -> entities[first]?.area ?: sensorTypeTitle(haEntityType(first), anyRoom)
+                else -> entities[first]?.area ?: sensorTypeTitle(haEntityType(first))
             }
             SensorCard(key, title, cardIds)
         }
 }
 
-/** Title of the entities of a [domain] without a room: "Other …" when some have one */
-fun sensorTypeTitle(domain: String, anyRoom: Boolean): String {
+/** Title of the entities of a [domain] without a room: "Sensors", "Binary sensors", … */
+fun sensorTypeTitle(domain: String): String {
     val type = when (domain) {
         "sensor" -> "sensors"
         "binary_sensor" -> "binary sensors"
         "scene" -> "scenes"
         "script" -> "scripts"
         "button" -> "buttons"
+        "alarm_control_panel" -> "alarm"
+        "vacuum" -> "robots"
+        "fan" -> "fans"
+        "light" -> "lights"
         else -> domain
     }
-    return if (anyRoom) "Other $type" else type.replaceFirstChar { it.uppercase() }
+    return type.replaceFirstChar { it.uppercase() }
 }
 
 /** [ids] with the card [key] moved [by] cards (-1 up, 1 down) */
@@ -289,7 +297,9 @@ fun HaAssistantTab(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (views.size > 1) {
-            Row(
+            // A lazy row, not a plain one: with more views than fit, the row has to scroll the one
+            // the remote is on into view, which is what a lazy list does on its own
+            LazyRow(
                 Modifier
                     // Just under the top bar's tabs, rather than the whole margin below
                     .layout { measurable, constraints ->
@@ -300,13 +310,16 @@ fun HaAssistantTab(
                     .padding(start = inset, end = inset, bottom = 4.dp)
                     .height(ViewRowHeight),
             ) {
-                views.forEachIndexed { index, view ->
+                itemsIndexed(views) { index, view ->
                     TabButton(
                         view.title,
                         selected = index == viewIndex,
                         onSelect = { viewIndex = index },
                         secondary = true,
-                        modifier = Modifier.focusRequester(viewTabs[index]).focusProperties { up = tabFocus },
+                        modifier = Modifier
+                            .widthIn(max = 240.dp)
+                            .focusRequester(viewTabs[index])
+                            .focusProperties { up = tabFocus },
                     )
                 }
             }
@@ -872,7 +885,11 @@ private fun CardContent(
             .onFocusChanged { if (it.isFocused) onButtonFocused(index) }
             // Only once gone into the card
             .focusProperties { canFocus = entered }
-        if (isHaToggle(id)) {
+        if (isAlarm(id)) {
+            AlarmRow(connection, id, names[id], modifier)
+        } else if (isHaVacuum(id)) {
+            VacuumRow(connection, id, names[id], modifier)
+        } else if (isHaToggle(id)) {
             ToggleRow(connection, id, names[id], modifier)
         } else if (isHaSelect(id)) {
             SelectRow(connection, id, names[id], modifier)
@@ -895,8 +912,11 @@ private fun CardHeading(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** Alarms are interactive on their own: OK picks a service, then the code is typed */
+private fun isAlarm(id: String) = id.substringBefore('.') == "alarm_control_panel"
+
 /** Buttons (scenes, scripts, buttons), switches (lights, switches, automations…) and selects: what OK acts on in a card */
-private fun isInteractive(id: String) = isHaAction(id) || isHaToggle(id) || isHaSelect(id)
+private fun isInteractive(id: String) = isHaAction(id) || isHaToggle(id) || isHaSelect(id) || isAlarm(id)
 
 /**
  * A light, switch, fan or input boolean: a sensor row with a switch at its end, showing whether
@@ -910,10 +930,32 @@ private fun ToggleRow(connection: HaConnection, id: String, name: String?, modif
     val entity = connection.entities[id]
     val on = entity?.state == "on"
     val ready = connection.session != null
+    // A light's level is 0-255, a fan's a percentage; both read as a percentage here
+    val domain = id.substringBefore('.')
+    val level = when (domain) {
+        "light" -> entity?.attributes?.optInt("brightness", -1)?.takeIf { it >= 0 }?.let { (it * 100 / 255).coerceIn(0, 100) }
+        "fan" -> entity?.attributes?.optInt("percentage", -1)?.takeIf { it >= 0 }
+        else -> null
+    }
+    val steppable = level != null
+    val step = { delta: Int ->
+        val wanted = ((level ?: 100) + delta).coerceIn(1, 100)
+        connection.setLevel(id, wanted, scope, context)
+    }
     Surface(
         onClick = { connection.toggle(id, scope, context) },
         // As wide as the card's padding allows, so its icon and text line up with the sensors' above and below
-        modifier = modifier.widenBy(ToggleRowInset),
+        modifier = modifier
+            .widenBy(ToggleRowInset)
+            // Left and right set the level, where the entity has one
+            .onPreviewKeyEvent { event ->
+                if (!steppable || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { step(-10); true }
+                    Key.DirectionRight -> { step(10); true }
+                    else -> false
+                }
+            },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors = ClickableSurfaceDefaults.colors(
@@ -929,6 +971,63 @@ private fun ToggleRow(connection: HaConnection, id: String, name: String?, modif
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MdiIcon(entity?.icon ?: "", color = LocalContentColor.current)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    name ?: entity?.name ?: id,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (steppable && on) {
+                    Text(
+                        "${level ?: 0}%   ◂ ▸",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalContentColor.current.copy(alpha = 0.7f),
+                        maxLines = 1,
+                    )
+                }
+            }
+            SwitchMark(on, LocalContentColor.current)
+        }
+    }
+}
+
+/**
+ * A vacuum: what it is doing, and OK opens the services the robot supports — start, pause, return to the
+ * dock. A robot that is coming home doesn't need to be asked twice, so the menu only lists what applies.
+ */
+@Composable
+private fun VacuumRow(connection: HaConnection, id: String, name: String?, modifier: Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
+    val entity = connection.entities[id]
+    val ready = connection.session != null
+    var menuOpen by remember { mutableStateOf(false) }
+    val state = entity?.state?.replace('_', ' ').orEmpty()
+    val actions = buildList {
+        if (entity?.state != "cleaning") add(MenuAction("Start") { connection.vacuum(id, "start", scope, context); menuOpen = false })
+        if (entity?.state == "cleaning") add(MenuAction("Pause") { connection.vacuum(id, "pause", scope, context); menuOpen = false })
+        if (entity?.state != "docked") add(MenuAction("Return to dock") { connection.vacuum(id, "return_to_base", scope, context); menuOpen = false })
+    }
+    Surface(
+        onClick = { if (actions.isNotEmpty()) menuOpen = true },
+        modifier = modifier.widenBy(ToggleRowInset),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = if (ready) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.5f),
+            focusedContainerColor = colors.onSurface,
+            focusedContentColor = colors.inverseOnSurface,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = ToggleRowInset, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MdiIcon(entity?.icon ?: "mdi:robot-vacuum", color = LocalContentColor.current)
             Text(
                 name ?: entity?.name ?: id,
                 style = MaterialTheme.typography.bodyMedium,
@@ -936,7 +1035,105 @@ private fun ToggleRow(connection: HaConnection, id: String, name: String?, modif
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            SwitchMark(on, LocalContentColor.current)
+            Text(state, style = MaterialTheme.typography.labelMedium, color = LocalContentColor.current)
+        }
+    }
+    if (menuOpen) {
+        ContextMenu(
+            title = name ?: entity?.name ?: id,
+            actions = actions,
+            onDismiss = { menuOpen = false },
+        )
+    }
+}
+
+/**
+ * An alarm: its state, and OK opens the three services. One of those asks for the code on the spot, in a
+ * numeric field that is cleared as soon as the call is made — the launcher never keeps it.
+ */
+@Composable
+private fun AlarmRow(connection: HaConnection, id: String, name: String?, modifier: Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
+    val entity = connection.entities[id]
+    val ready = connection.session != null
+    var menuOpen by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf<String?>(null) }
+    var code by remember { mutableStateOf("") }
+    Surface(
+        onClick = { menuOpen = true },
+        modifier = modifier.widenBy(ToggleRowInset),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = if (ready) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.5f),
+            focusedContainerColor = colors.onSurface,
+            focusedContentColor = colors.inverseOnSurface,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = ToggleRowInset, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MdiIcon(entity?.icon ?: "mdi:shield-home", color = LocalContentColor.current)
+            Text(
+                name ?: entity?.name ?: id,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                entity?.state?.replace('_', ' ').orEmpty(),
+                style = MaterialTheme.typography.labelMedium,
+                color = LocalContentColor.current,
+            )
+        }
+    }
+    if (menuOpen) {
+        ContextMenu(
+            title = name ?: entity?.name ?: id,
+            actions = listOf(
+                MenuAction("Arm home") { menuOpen = false; asking = "alarm_arm_home" },
+                MenuAction("Arm away") { menuOpen = false; asking = "alarm_arm_away" },
+                MenuAction("Disarm") { menuOpen = false; asking = "alarm_disarm" },
+            ),
+            onDismiss = { menuOpen = false },
+        )
+    }
+    asking?.let { action ->
+        TopDialog(
+            title = action.replace('_', ' ').replaceFirstChar { it.uppercase() },
+            onDismiss = { asking = null; code = "" },
+            buttons = listOf(
+                DialogButton("Cancel", onClick = { asking = null; code = "" }),
+                DialogButton("Do it", primary = true, enabled = code.isNotEmpty()) {
+                    connection.alarm(id, action, code, scope, context)
+                    // The code goes no further than this call
+                    asking = null
+                    code = ""
+                },
+            ),
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text("The code is sent to Home Assistant and not kept.", style = MaterialTheme.typography.bodySmall)
+                TvTextField(
+                    value = code,
+                    onValueChange = { value -> code = value.filter { it.isDigit() }.take(12) },
+                    placeholder = "Code",
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                    onImeAction = {
+                        connection.alarm(id, action, code, scope, context)
+                        asking = null
+                        code = ""
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
         }
     }
 }

@@ -88,6 +88,19 @@ class LauncherPrefs(context: Context) {
     val haEntities: List<String>
         get() = if (prefs.contains("ha_top_bar")) readList("ha_entities") else readList("ha_entities").filterNot(::isHaAction) + oldHaActions()
 
+    /** The names the launcher shows for entities, "entity_id=Label", by id */
+    var haEntityNames: List<String>
+        get() = readList("ha_entity_names")
+        set(value) = writeList("ha_entity_names", value)
+
+    /**
+     * What the Home tab's panel shows beside the camera: its own list, so the tab can hold the living
+     * room while the Assistant tab holds the house. Absent from older setups, it falls back to what
+     * that tab used to show: everything chosen that is not a scene or script.
+     */
+    val haHomeEntities: List<String>
+        get() = if (prefs.contains("ha_home_entities")) readList("ha_home_entities") else haEntities.filterNot(::isHaAction)
+
     /** The scenes, scripts and buttons also in the top bar, at most [MAX_HA_ACTIONS] */
     val haTopBar: List<String>
         get() = if (prefs.contains("ha_top_bar")) readList("ha_top_bar") else oldHaActions().take(MAX_HA_ACTIONS)
@@ -112,11 +125,30 @@ class LauncherPrefs(context: Context) {
         }
 
     // Together: before the top bar was a choice of its own, the actions were in another list
-    fun saveHaChoice(entities: List<String>, topBar: List<String>) {
+    fun saveHaChoice(entities: List<String>, homeEntities: List<String>, topBar: List<String>) {
         writeList("ha_entities", entities)
+        writeList("ha_home_entities", homeEntities.filter { it in entities })
         writeList("ha_top_bar", topBar)
         prefs.edit { remove("ha_actions") }
     }
+
+    // What [haDisplay] holds, one key each, so the settings page can describe a choice without going
+    // through the dialog. Null is "the chosen entities"; "" is Home Assistant's own default dashboard,
+    // which is a dashboard like any other and keeps its own key.
+    val haDashboard: String? get() = haDisplay.dashboard
+    val haHomeDashboard: String? get() = haDisplay.homeDashboard
+
+    var haBottomRow: Boolean
+        get() = haDisplay.bottomRow
+        set(value) { haDisplay = haDisplay.copy(bottomRow = value) }
+
+    var haSectionColumns: Boolean
+        get() = haDisplay.sectionColumns
+        set(value) { haDisplay = haDisplay.copy(sectionColumns = value) }
+
+    var haHomeColumns: Boolean
+        get() = haDisplay.homeColumns
+        set(value) { haDisplay = haDisplay.copy(homeColumns = value) }
 
     // Earlier versions kept the top bar's actions in "ha_actions", and before that with the sensors
     private fun oldHaActions() = if (prefs.contains("ha_actions")) readList("ha_actions") else readList("ha_entities").filter(::isHaAction)
@@ -191,6 +223,263 @@ class LauncherPrefs(context: Context) {
         get() = prefs.getInt("log_hours_kept", LOG_HOURS_DEFAULT).coerceIn(LOG_HOURS_MIN, LOG_HOURS_MAX)
         set(value) = prefs.edit { putInt("log_hours_kept", value) }
 
+    /**
+     * The Home tab's bottom row shows Frigate's events above the apps. Off, the events stay on the
+     * Cameras tab and the Alerts tab, and the Home tab is the apps.
+     */
+    var homeAlertsRow: Boolean
+        get() = prefs.getBoolean("home_alerts_row", false)
+        set(value) = prefs.edit { putBoolean("home_alerts_row", value) }
+
+    /** The row under the apps: what the TV's own apps last played */
+    var continueWatching: Boolean
+        get() = prefs.getBoolean("continue_watching", true)
+        set(value) = prefs.edit { putBoolean("continue_watching", value) }
+
+    /** Left on the first app goes to the last, and right off the last goes to the first */
+    var appRowWrap: Boolean
+        get() = prefs.getBoolean("app_row_wrap", true)
+        set(value) = prefs.edit { putBoolean("app_row_wrap", value) }
+
+    /**
+     * Where camera pictures come from: [CAMERAS_DIRECT] reads the cameras' own addresses, [CAMERAS_HOME_ASSISTANT]
+     * has Home Assistant do it, so the TV needs no access to the cameras or to go2rtc.
+     */
+    var cameraSource: String
+        get() = prefs.getString("camera_source", CAMERAS_DIRECT).takeIf { it in CAMERA_SOURCES } ?: CAMERAS_DIRECT
+        set(value) = prefs.edit { putString("camera_source", value) }
+
+    /**
+     * Which camera the Home tab shows when the launcher starts: [HOME_CAMERA_FIRST] (the first in the
+     * list, so the order in the camera dialog decides) or [HOME_CAMERA_LAST] (whichever the remote last
+     * switched to). Channel up and down always switch at once, whichever this is.
+     */
+    var homeCameraStart: String
+        get() = prefs.getString("home_camera_start", HOME_CAMERA_LAST).takeIf { it in HOME_CAMERA_STARTS } ?: HOME_CAMERA_LAST
+        set(value) = prefs.edit { putString("home_camera_start", value) }
+
+    /** Home Assistant cameras, as "entity|name", in display order */
+    var haCameraEntities: List<String>
+        get() = readList("ha_camera_entities")
+        set(value) = writeList("ha_camera_entities", value)
+
+    /**
+     * What fills the Home tab beside the camera when the picture is narrower than its slot:
+     * [CAMERA_SIDE_LEFT] leaves the gap, [CAMERA_SIDE_CENTRE] centres the picture,
+     * [CAMERA_SIDE_WIDER] gives the gap to the widgets.
+     */
+    var cameraSide: String
+        get() = prefs.getString("camera_side", CAMERA_SIDE_LEFT).takeIf { it in CAMERA_SIDES } ?: CAMERA_SIDE_LEFT
+        set(value) = prefs.edit { putString("camera_side", value) }
+
+    /**
+     * What is behind everything: [BACKGROUND_NONE] keeps the launcher's own dark background,
+     * [BACKGROUND_COLOUR] fills it with [backgroundColour], [BACKGROUND_IMAGE] draws [backgroundImage].
+     */
+    var backgroundKind: String
+        get() = prefs.getString("background_kind", BACKGROUND_NONE).takeIf { it in BACKGROUND_KINDS } ?: BACKGROUND_NONE
+        set(value) = prefs.edit { putString("background_kind", value) }
+
+    /** The colour a [BACKGROUND_COLOUR] background fills with, as ARGB */
+    var backgroundColour: Int
+        get() = prefs.getInt("background_colour", 0xFF000000.toInt())
+        set(value) = prefs.edit { putInt("background_colour", value) }
+
+    /** Where the chosen image was copied to, inside the app's own folder */
+    var backgroundImage: String
+        get() = prefs.getString("background_image", "").orEmpty()
+        set(value) = prefs.edit { putString("background_image", value) }
+
+    /** How the image fills the screen: [BACKGROUND_FITS] */
+    var backgroundFit: String
+        get() = prefs.getString("background_fit", BACKGROUND_FILL).takeIf { it in BACKGROUND_FITS } ?: BACKGROUND_FILL
+        set(value) = prefs.edit { putString("background_fit", value) }
+
+    /** How dark the layer over the background is, in percent: what keeps text readable over any picture */
+    var backgroundScrim: Int
+        get() = prefs.getInt("background_scrim", BACKGROUND_SCRIM_DEFAULT).coerceIn(BACKGROUND_SCRIM)
+        set(value) = prefs.edit { putInt("background_scrim", value) }
+
+    /**
+     * A new order once per session: the camera on the Home tab, the top bar's actions and the Home
+     * Assistant cards on it. Rolled when the launcher starts after the TV has been off a while, and
+     * again after [shuffleHours] of it being left on; never while the remote is in use.
+     */
+    var shuffleCamera: Boolean
+        get() = prefs.getBoolean("shuffle_camera", false)
+        set(value) = prefs.edit { putBoolean("shuffle_camera", value) }
+
+    var shuffleActions: Boolean
+        get() = prefs.getBoolean("shuffle_actions", false)
+        set(value) = prefs.edit { putBoolean("shuffle_actions", value) }
+
+    /** Each session, the camera and the widgets swap sides */
+    var shuffleSides: Boolean
+        get() = prefs.getBoolean("shuffle_sides", false)
+        set(value) = prefs.edit { putBoolean("shuffle_sides", value) }
+
+    var shuffleCards: Boolean
+        get() = prefs.getBoolean("shuffle_cards", false)
+        set(value) = prefs.edit { putBoolean("shuffle_cards", value) }
+
+    /** Hours of the TV being on before the order is rolled again; 0 means only on a new session */
+    var shuffleHours: Int
+        get() = prefs.getInt("shuffle_hours", 0).coerceIn(SHUFFLE_HOURS)
+        set(value) = prefs.edit { putInt("shuffle_hours", value) }
+
+    /** The current order's seed, and when it was last rolled: what makes it per session, not per frame */
+    var shuffleSeed: Int
+        get() = prefs.getInt("shuffle_seed", 0)
+        set(value) = prefs.edit { putInt("shuffle_seed", value) }
+
+    var shuffleRolledAt: Long
+        get() = prefs.getLong("shuffle_rolled_at", 0L)
+        set(value) = prefs.edit { putLong("shuffle_rolled_at", value) }
+
+    /**
+     * Icons chosen for apps, as "package=file" entries: a picture copied into the app's own folder,
+     * drawn instead of the app's banner or icon.
+     */
+    var appIcons: List<String>
+        get() = readList("app_icons")
+        set(value) = writeList("app_icons", value)
+
+    /** A count of new Frigate events beside the clock, cleared when the Alerts tab is opened */
+    var badge: Boolean
+        get() = prefs.getBoolean("badge", false)
+        set(value) = prefs.edit { putBoolean("badge", value) }
+
+    /** A dot on the Alerts tab while there are alerts nobody has looked at */
+    var alertsDot: Boolean
+        get() = prefs.getBoolean("alerts_dot", true)
+        set(value) = prefs.edit { putBoolean("alerts_dot", value) }
+
+    /** Events that started before this are already seen; they stay out of the count */
+    var badgeSeenAt: Double
+        get() = Double.fromBits(prefs.getLong("badge_seen_at", 0L))
+        set(value) = prefs.edit { putLong("badge_seen_at", value.toBits()) }
+
+    var alertsTab: Boolean
+        get() = prefs.getBoolean("alerts_tab", true)
+        set(value) = prefs.edit { putBoolean("alerts_tab", value) }
+
+    /** The remote's channel up and down keys switch to the next or previous camera */
+    var channelKeys: Boolean
+        get() = prefs.getBoolean("channel_keys", true)
+        set(value) = prefs.edit { putBoolean("channel_keys", value) }
+
+    /**
+     * Camera sound: [CAMERA_SOUND_FULLSCREEN] keeps the tiles silent and plays a camera's sound in full
+     * screen, [CAMERA_SOUND_MUTED] never plays it. A camera's own "Use audio track" still decides
+     * whether its player gets the track at all.
+     */
+    var cameraSound: String
+        get() = prefs.getString("camera_sound", CAMERA_SOUND_FULLSCREEN).takeIf { it in CAMERA_SOUNDS } ?: CAMERA_SOUND_FULLSCREEN
+        set(value) = prefs.edit { putString("camera_sound", value) }
+
+    /**
+     * Home Assistant calendar entities on the Home tab, in display order. Empty means the widget is
+     * not shown; a calendar added in Home Assistant appears in the picker with no app change.
+     */
+    var calendarEntities: List<String>
+        get() = readList("calendar_entities")
+        set(value) = writeList("calendar_entities", value)
+
+    /**
+     * Colours chosen per calendar, as "entityId=#RRGGBB". A calendar without an entry takes the
+     * palette colour for its position, which is the order Home Assistant's own card uses.
+     */
+    var calendarColours: List<String>
+        get() = readList("calendar_colours")
+        set(value) = writeList("calendar_colours", value)
+
+    /** The Home tab's sensors card; off leaves its space to the calendar */
+    var homeSensors: Boolean
+        get() = prefs.getBoolean("home_sensors", true)
+        set(value) = prefs.edit { putBoolean("home_sensors", value) }
+
+    /** How many days of events the widget covers */
+    var calendarDays: Int
+        get() = prefs.getInt("calendar_days", CALENDAR_DAYS_DEFAULT).coerceIn(CALENDAR_DAYS)
+        set(value) = prefs.edit { putInt("calendar_days", value) }
+
+    /** The most events the widget lists, however many fit the window */
+    var calendarMaxEvents: Int
+        get() = prefs.getInt("calendar_max_events", CALENDAR_MAX_EVENTS_DEFAULT).coerceIn(CALENDAR_MAX_EVENTS)
+        set(value) = prefs.edit { putInt("calendar_max_events", value) }
+
+    /** How often the widget asks Home Assistant for the events again */
+    var calendarRefreshMinutes: Int
+        get() = prefs.getInt("calendar_refresh_minutes", CALENDAR_REFRESH_DEFAULT).coerceIn(CALENDAR_REFRESH)
+        set(value) = prefs.edit { putInt("calendar_refresh_minutes", value) }
+
+    /** How the day headings read: [CALENDAR_TODAY_TOMORROW] or [CALENDAR_DATE] */
+    var calendarGroupStyle: String
+        get() = prefs.getString("calendar_group_style", CALENDAR_TODAY_TOMORROW).takeIf { it in CALENDAR_GROUP_STYLES } ?: CALENDAR_TODAY_TOMORROW
+        set(value) = prefs.edit { putString("calendar_group_style", value) }
+
+    /** All-day events listed alongside the timed ones */
+    var calendarShowAllDay: Boolean
+        get() = prefs.getBoolean("calendar_show_all_day", true)
+        set(value) = prefs.edit { putBoolean("calendar_show_all_day", value) }
+
+    /** How the card orders events: [CALENDAR_BY_TIME] or [CALENDAR_BY_PRIORITY] */
+    var calendarGrouping: String
+        get() = prefs.getString("calendar_grouping", CALENDAR_BY_TIME).takeIf { it in CALENDAR_GROUPINGS } ?: CALENDAR_BY_TIME
+        set(value) = prefs.edit { putString("calendar_grouping", value) }
+
+    /** Nothing scheduled: hide the card rather than say so */
+    var calendarHideEmpty: Boolean
+        get() = prefs.getBoolean("calendar_hide_empty", true)
+        set(value) = prefs.edit { putBoolean("calendar_hide_empty", value) }
+
+    /** The calendar card's settings as one value, read where they are all known at once */
+    fun calendarConfig() = CalendarConfig(
+        entities = calendarEntities,
+        days = calendarDays,
+        maxEvents = calendarMaxEvents,
+        groupStyle = calendarGroupStyle,
+        showAllDay = calendarShowAllDay,
+        hideEmpty = calendarHideEmpty,
+        colours = calendarColours,
+        grouping = calendarGrouping,
+    )
+
+    /** Leaves out the apps that only have a phone launcher, no TV entry point */
+    var hidePhoneApps: Boolean
+        get() = prefs.getBoolean("hide_phone_apps", false)
+        set(value) = prefs.edit { putBoolean("hide_phone_apps", value) }
+
+    /** The tile at the end of the apps that opens everything, beside the favourites */
+    var allAppsTile: Boolean
+        get() = prefs.getBoolean("all_apps_tile", true)
+        set(value) = prefs.edit { putBoolean("all_apps_tile", value) }
+
+    /**
+     * How many lines the "All apps" page shows at once: rows when it scrolls sideways, columns when
+     * it scrolls up and down. One is a single row, four is the smallest tiles.
+     */
+    var allAppsLines: Int
+        get() {
+            // A page saved as one row before lines existed keeps that look
+            if (!prefs.contains("all_apps_lines") && prefs.getString("all_apps_page", null) == "row") return 1
+            return prefs.getInt("all_apps_lines", ALL_APPS_LINES_DEFAULT).coerceIn(ALL_APPS_LINES)
+        }
+        set(value) = prefs.edit { putInt("all_apps_lines", value) }
+
+    /** Which way the "All apps" page scrolls: [ALL_APPS_HORIZONTAL] or [ALL_APPS_VERTICAL] */
+    var allAppsScroll: String
+        get() = prefs.getString("all_apps_scroll", ALL_APPS_HORIZONTAL).takeIf { it in ALL_APPS_SCROLLS } ?: ALL_APPS_HORIZONTAL
+        set(value) = prefs.edit { putString("all_apps_scroll", value) }
+
+    /**
+     * Package keys of the apps the row shows, in their order. Empty means every visible app, as
+     * before favourites existed, so turning the feature on changes nothing until something is pinned.
+     */
+    var favouriteApps: List<String>
+        get() = readList("favourite_apps")
+        set(value) = writeList("favourite_apps", value)
+
     /** Show the memory left on the TV in the top bar */
     var showFreeMemory: Boolean
         get() = prefs.getBoolean("show_free_memory", false)
@@ -243,3 +532,58 @@ fun arrange(apps: List<InstalledApp>, order: List<String>, hidden: List<String>)
     // sortedBy is stable, so unranked apps keep their alphabetical order
     return apps.filter { it.key !in hiddenKeys }.sortedBy { rank[it.key] ?: Int.MAX_VALUE }
 }
+
+/** The two layouts the "All apps" page offers */
+const val CALENDAR_BY_TIME = "time"
+const val CALENDAR_BY_PRIORITY = "priority"
+val CALENDAR_GROUPINGS = listOf(CALENDAR_BY_TIME, CALENDAR_BY_PRIORITY)
+const val CALENDAR_TODAY_TOMORROW = "today_tomorrow"
+const val CALENDAR_DATE = "date"
+val CALENDAR_GROUP_STYLES = listOf(CALENDAR_TODAY_TOMORROW, CALENDAR_DATE)
+const val CALENDAR_DAYS_DEFAULT = 3
+val CALENDAR_DAYS = 1..14
+const val CALENDAR_MAX_EVENTS_DEFAULT = 20
+val CALENDAR_MAX_EVENTS = 1..50
+const val CALENDAR_REFRESH_DEFAULT = 30
+val CALENDAR_REFRESH = 5..120
+
+const val CAMERA_SIDE_LEFT = "left"
+const val CAMERA_SIDE_CENTRE = "centre"
+const val CAMERA_SIDE_WIDER = "wider"
+val CAMERA_SIDES = listOf(CAMERA_SIDE_LEFT, CAMERA_SIDE_CENTRE, CAMERA_SIDE_WIDER)
+
+val SHUFFLE_HOURS = 0..24
+/** After this long away, coming back to the launcher counts as a new session */
+const val SHUFFLE_SESSION_GAP_MS = 30 * 60_000L
+
+const val BACKGROUND_NONE = "none"
+const val BACKGROUND_COLOUR = "colour"
+const val BACKGROUND_IMAGE = "image"
+val BACKGROUND_KINDS = listOf(BACKGROUND_NONE, BACKGROUND_COLOUR, BACKGROUND_IMAGE)
+const val BACKGROUND_FILL = "fill"
+const val BACKGROUND_FIT = "fit"
+const val BACKGROUND_STRETCH = "stretch"
+const val BACKGROUND_TILE = "tile"
+const val BACKGROUND_CENTRE = "centre"
+val BACKGROUND_FITS = listOf(BACKGROUND_FILL, BACKGROUND_FIT, BACKGROUND_STRETCH, BACKGROUND_TILE, BACKGROUND_CENTRE)
+const val BACKGROUND_SCRIM_DEFAULT = 65
+val BACKGROUND_SCRIM = 0..95
+
+const val HOME_CAMERA_FIRST = "first"
+const val HOME_CAMERA_LAST = "last"
+val HOME_CAMERA_STARTS = listOf(HOME_CAMERA_FIRST, HOME_CAMERA_LAST)
+
+const val CAMERAS_DIRECT = "direct"
+const val CAMERAS_HOME_ASSISTANT = "home_assistant"
+
+val CAMERA_SOURCES = listOf(CAMERAS_DIRECT, CAMERAS_HOME_ASSISTANT)
+
+const val CAMERA_SOUND_FULLSCREEN = "fullscreen"
+const val CAMERA_SOUND_MUTED = "muted"
+val CAMERA_SOUNDS = listOf(CAMERA_SOUND_FULLSCREEN, CAMERA_SOUND_MUTED)
+
+const val ALL_APPS_HORIZONTAL = "horizontal"
+const val ALL_APPS_VERTICAL = "vertical"
+val ALL_APPS_SCROLLS = listOf(ALL_APPS_HORIZONTAL, ALL_APPS_VERTICAL)
+const val ALL_APPS_LINES_DEFAULT = 2
+val ALL_APPS_LINES = 1..6

@@ -121,6 +121,8 @@ data class SettingsFile(
                                 is Boolean, is Int -> put(key, value)
                                 is Number -> put(key, value.toInt())
                                 is String -> put(key, value)
+                                // Ordered id lists: calendars, favourites
+                                is List<*> -> put(key, JSONArray(value.filterIsInstance<String>()))
                             }
                         }
                     },
@@ -166,6 +168,7 @@ fun settingsFromJson(json: String): SettingsFile? = runCatching {
                 when (val value = object_.get(key)) {
                     is Boolean, is Int -> value
                     is Number -> value.toInt()
+                    is JSONArray -> List(value.length()) { value.getString(it) }
                     else -> value.toString()
                 }
             }
@@ -233,6 +236,7 @@ fun ChecklistDialog(
     file: SettingsFile,
     onConfirm: (SettingsFile) -> Unit,
     onDismiss: () -> Unit,
+    subtitle: String? = null,
     above: @Composable () -> Unit = {},
     below: @Composable () -> Unit = {},
 ) {
@@ -247,6 +251,7 @@ fun ChecklistDialog(
     TopDialog(
         title = title,
         onDismiss = onDismiss,
+        subtitle = subtitle,
         buttons = listOfNotNull(
             // Partly checked counts as checked: one press clears the list
             DialogButton(if (canConfirm) "Uncheck all" else "Check all") {
@@ -381,6 +386,7 @@ fun ImportDialog(onImport: (SettingsFile) -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var opened by remember { mutableStateOf<SettingsFile?>(null) }
+    var source by remember { mutableStateOf<String?>(null) }
     var fromFile by remember { mutableStateOf(false) }
     var browsing by remember { mutableStateOf(false) }
 
@@ -389,6 +395,8 @@ fun ImportDialog(onImport: (SettingsFile) -> Unit, onDismiss: () -> Unit) {
         ChecklistDialog(
             title = "Import settings",
             confirmLabel = "Import",
+            subtitle = source?.let { "From $it. What is ticked replaces this TV's own." }
+                ?: "What is ticked replaces this TV's own.",
             file = settings,
             onConfirm = {
                 onImport(it)
@@ -400,7 +408,10 @@ fun ImportDialog(onImport: (SettingsFile) -> Unit, onDismiss: () -> Unit) {
         ImportFromTv(onImport = onImport, onOpenFile = { fromFile = true }, onDismiss = onDismiss)
     } else if (!browsing) {
         importSettings(
-            onImport = { opened = it },
+            onImport = { file, name ->
+                source = name
+                opened = file
+            },
             onBrowseFiles = { browsing = true },
             // Back from here returns to the way in, not out of importing
             onDismiss = { fromFile = false },
@@ -413,6 +424,7 @@ fun ImportDialog(onImport: (SettingsFile) -> Unit, onDismiss: () -> Unit) {
                 scope.launch {
                     val read = withContext(Dispatchers.IO) { runCatching { settingsFromJson(file.readText()) }.onFailure { AppLog.w("Settings", "Can't read the settings file", it) }.getOrNull() }
                     if (read != null) {
+                        source = file.name
                         opened = read
                     } else {
                         Toast.makeText(context, "${file.name} isn't a settings file", Toast.LENGTH_LONG).show()

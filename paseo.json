@@ -1,0 +1,17 @@
+{
+  "worktree": {
+    "setup": [],
+    "teardown": []
+  },
+  "scripts": {
+    "build": {
+      "type": "script",
+      "command": "./gradlew assembleDebug"
+    }
+  },
+  "metadataGeneration": {
+    "title": {
+      "instructions": "Title as '<subsystem> \u00b7 <change>', where subsystem is one of fork, home, settings, cameras, assistant, apps, build. Example: 'settings \u00b7 8 rows were unreachable'. Never title by tooling."
+    }
+  }
+}

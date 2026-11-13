@@ -6,6 +6,13 @@ import android.app.Application
 class HomeBoardApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        instance = this
         AppLog.start(this)
+    }
+
+    companion object {
+        /** The one application object: the notification listener and the log both read it */
+        lateinit var instance: HomeBoardApp
+            private set
     }
 }

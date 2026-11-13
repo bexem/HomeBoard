@@ -36,8 +36,809 @@ Upstream: `fplanque/HomeBoard`, Apache-2.0. Fork work lives on `fork/*` branches
 
 ### Not done in M1 (next milestones)
 
-`home_alerts_row`, `continue_watching`, `app_row_wrap`, favourites, the All apps page (M2); the calendar
-(M3); the Assistant device tiles (M4). Each is one entry in `SettingsSchema.kt` plus its feature code.
+The Assistant device tiles (M4).
+
+## M3 — the calendar card
+
+### New files
+
+| File | What it is |
+|---|---|
+| `HaCalendar.kt` | `HaEvent` (all-day events carry the day alone), `CalendarConfig`, the merge (day, then time, all-day first, calendar order as tie-break), the day grouping (Today/Tomorrow or dates), and `haCalendarEvents()` — the REST read. |
+| `CalendarWidget.kt` | The card, after the Calendar Pro card Ema uses on his dashboard: one block per event with a coloured bar for its calendar, the title in bold, then a clock and `HaEvent.detailLine` ("All day", "19:00, ends tomorrow at 07:00", "Tomorrow 19:00, ends Thu at 07:00"). Three entries tall at most, so the sensors keep their space; a whole window is cut, never scrolled. Absent with no calendars or an unsupported server; "Connecting" during the first read; the last events dimmed when offline; "Nothing scheduled in the next N days" unless `calendar_hide_empty`. |
+| `CalendarPickerDialog.kt` | Which calendars, in priority order: read live from `getStates()` when it opens, OK chooses, left/right set priority ("Priority 2 of 4"). The list keeps the server's order so choosing never moves the row under the remote. |
+| `CalendarColoursDialog.kt` | The colour of each chosen calendar: a dot, its name from Home Assistant, and left/right through an eight-colour palette. Stored per entity (`calendar_colours`, "id=#RRGGBB"), so reordering calendars keeps their colours. |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistant.kt` | `httpClient` is `internal` so the calendar read can use the shared client and the TV's token. |
+| `HomeAssistantPanel.kt` | `HaConnection.calendarEvents` / `calendarsUnsupported` / `calendarsLoaded`; a polling child of the session (`refreshCalendars`, `calendar_refresh_minutes`); `CalendarCard` between the weather tiles and the sensors; `HomeAssistantPanel(calendar = …)`. |
+| `LauncherPrefs.kt` | `calendarEntities`, `calendarDays` (3), `calendarMaxEvents` (8), `calendarRefreshMinutes` (30), `calendarGroupStyle`, `calendarShowAllDay`, `calendarHideEmpty`, and `calendarConfig()`. |
+| `SettingsSchema.kt` | A `Calendar` section with seven rows; a `SettingKind.List` with a `strings` property, so ordered id lists are part of every export (`calendar_entities`, `favourite_apps`). |
+| `SettingsMenuDialog.kt` | List rows render as action rows; `openCalendars` in `SettingsActions`. |
+| `ExportImport.kt` | `preferences` carries JSON arrays and reads them back as lists — before this, lists were silently dropped. |
+| `MainActivity.kt` | Reads `calendarConfig` at start and on any settings change; passes it to the panel and to `rememberHaConnection`; the picker overlay writes `calendar_entities` at once. |
+
+### Deliberate designs worth keeping
+
+- **The sensors card can be hidden and the calendar takes its space**: `home_sensors` off drops the whole
+  card from the panel, and the calendar stops being capped at three entries (`expanded`) and takes
+  `weight(1f)` — with the top bar's way in moved onto it, so nothing becomes unreachable. Its title is
+  "Sensors", not "Other sensors".
+- **The card can group by calendar**: `calendar_grouping` = `priority` sorts by calendar rank first, then
+  time, so a work shift is not pushed below a birthday or a bin collection; `time` reads as a diary.
+- **No calendar limit, a priority list instead**: every chosen calendar contributes events; the picker is
+  ranked (priority 1..N), and the rank is the order the card and the merge use. `calendar_max_events` is a
+  ceiling on listed events (default 20, range 1..50) and the panel's own height normally bites first.
+- **A calendar's colour is the launcher's**: Home Assistant exposes no colour for a calendar entity over its
+  API (the state carries times and a message only), so the palette is local, defaulting to the colour of
+  the calendar's position — the rule Home Assistant's own card follows — and overridable per calendar.
+- **The calendar is read over REST, not the websocket**: `calendar/get_events` is not registered on this
+  Home Assistant (2026.11.0 answers "Unknown command"), while `GET /api/calendars/<id>` is documented and
+  returns the same events in a different shape (`start: {date|dateTime}` instead of a string). `HaEvent.from`
+  accepts both, so a future server that does register the command needs no change.
+- **The window starts at midnight, not at "now"**: Home Assistant leaves out events that started earlier,
+  so querying from the current minute hid today's all-day and already-running events.
+- **`optString` is not a string reader**: Android's `optString` returns the JSON text for an object, so
+  `{"date":"2026-11-10"}` came back as a string that matched neither shape and the event was dropped
+  silently. The private reader takes `opt(key) as? String` only.
+- **Every import asks first**: the file picker, the TV's own browser and the app folder all end in the same
+  checklist, which now names the file ("From homeboard-settings-2026-11-10-171505.json. What is ticked
+  replaces this TV's own."). Before this the picker and the app folder applied the whole file at once,
+  with no way to see what it would replace — that is how a test export overwrote live settings.
+- **Import refreshes the launcher**: `applyImport` re-reads every preference the running UI renders
+  (Home-tab rows, favourites, phone apps, camera sound, calendars), not just the ones M1 knew about;
+  before this the prefs changed under a UI still showing the old values.
+- **A list row is also an export field**: `SettingKind.List` carries the property, so calendars and
+  favourites travel with the settings file and come back on import (verified: export → change → import).
+
+## M2 — the Home tab, tamed, and camera sound
+
+### New files
+
+| File | What it is |
+|---|---|
+| `AllAppsPage.kt` | Every installed app on demand: a full-screen overlay, `LazyHorizontalGrid` or `LazyVerticalGrid` by the scroll setting, one to six lines, back closes. Tiles carry the row's menu (Pin / Unpin, Hide / Unhide, Info, Show hidden apps). A page rather than a tab because the four tabs are wired to the remote's colour buttons and to MainActivity's key handling. |
+| `FavouritesEditorDialog.kt` | Which apps the row shows and in what order: pinned apps first in their order, then the rest, a checkbox per app. OK pins; left and right on a pinned row move it along the row. Empty means every app, as before favourites existed. |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `AppRow.kt` | `favourites`, `allAppsTile`, `wrapRow`, `onOpenAllApps`, `onPin`/`onUnpin`, `restoreKey`/`onRestored`. The favourites filter the row and set its order; an `ALL_APPS_TILE_KEY` tile follows the last app; right off the last tile and left off the first wrap when `wrapRow`; the tile menu gains Pin/Unpin; a closed page hands focus back to the tile. |
+| `LauncherPrefs.kt` | `homeAlertsRow` (off), `continueWatching` (on), `appRowWrap` (on), `hidePhoneApps` (off), `homeSensors` (on), `allAppsTile` (on), `allAppsLines` (2, 1..6, read as 1 when an older `all_apps_page=row` is present), `allAppsScroll` (horizontal), `favouriteApps`, `cameraSound` (full screen). |
+| `SettingsSchema.kt` | A `Choice` kind (text property + `choices`) for the scroll direction; a `Home` section with those settings; `SettingAction.OpenFavourites`. |
+| `SettingsMenuDialog.kt` | `ChoiceRow` (OK opens a menu of the choices); `StepperRow` (the row is the single focus target, left and right change the value, the + and − are drawn rather than focusable); `openFavourites` in `SettingsActions`. |
+| `MainActivity.kt` | Reads the prefs; `soundEnabled = cameraSound == CAMERA_SOUND_FULLSCREEN` goes to `CameraGrid`, `MainCamera` and `FullScreenCamera`; logs the setting at start ("Camera sound: …"); `all` is filtered once by `hidePhoneApps`, so the row, the page and both menus agree; the Frigate events row and the No-alerts tile now need `homeAlertsRow` on the Home tab (Cameras keeps them); the Continue Watching row is skipped entirely when off; the page's Hide/Unhide write the same hidden list the row uses; the two overlays. |
+
+### Deliberate designs worth keeping
+
+- **The All apps page is an overlay, not a tab**: five tabs would mean touching the colour-button map and
+  MainActivity's key routing; the overlay needs neither, and it swallows the colour keys so a tab cannot
+  change underneath it.
+- **Favourites are identity, not order**: order is set in two places that write the same list — left/right
+  in the editor, and the row's own Move mode, which reorders the pinned apps and writes the favourites
+  list back. One list, so the two cannot disagree.
+- **Camera sound is two layers, on purpose**: each camera's own "Use audio track" says whether its stream
+  carries audio at all, and the global "Camera sound" says whether the players are allowed to hear it
+  (muted on the tiles, sound in full screen) or never. Only both on gives sound. Verified on the TV from
+  the log: `Camera sound: fullscreen` → `Player … started over TCP, audio: on`; `muted` → `audio: off`.
+- **Phone apps are filtered at the source**: `InstalledApp.isTvApp` already marks LEANBACK_LAUNCHER
+  apps, so "Hide phone apps" is one `filter` where the list is built, not a rule each view re-applies.
+- **A stepper is one focus target**: separate + and − buttons cannot be reached at the low end, where the
+  disabled one is skipped and focus jumps past the row (found on the TV). Left and right on the row
+  change the value; the buttons are drawn, not focusable.
+- **One hidden list for both views**: hiding from the page or from the row's menu removes the app from
+  both, and "Show hidden apps" shows it again in both.
+- **Pinning works from the page too**: the page's tile menu writes the same `favourite_apps` list the
+  row's menu does, so an app can be pinned where it is seen without going back to the row.
+- **The watch-next row has its own switch**: `continue_watching` off skips the row's composition and its
+  focus target, so down from the app row goes straight back to the camera. Verified by logging in and
+  out on the TV, not only by the pref.
+- **Wrapping is a key handler, not `focusProperties`**: `onPreviewKeyEvent` on the row intercepts only the
+  step off either end, so ordinary focus search keeps doing the rest.
+- **The All apps tile is reached through the last app's `right`**: a tile outside the row's index map is
+  unreachable by focus search alone (found on the TV: the row stopped at the last app).
 
 The build installed on the TV is a **debug** APK (no release keystore on this Mac yet), so it is
 debuggable and `run-as` works. Release signing is a separate step before any hand-off.
+
+## Fixed: 8 of the 39 settings rows could not be reached (2026-11-12)
+
+Found while planning the settings rework, from the live TV: the settings dialog's body was a plain
+`Column` with no scroll (`TopDialog.kt`), the Surface sized to its content, and the window clipped what
+did not fit. On a 1080p TV (960x540 dp) that hid, per tab: Home's `all_apps_scroll` and `favourite_apps`,
+Calendar's `calendar_show_all_day` and `calendar_hide_empty`, Cameras' `channel_keys`, `camera_sound`,
+`camera_grid_live` and `minimize_video_streams` — 8 of 39 rows, including a setting FORK.md says is in
+use. The dialog is now scrollable (`verticalScroll` on the body in `TopDialog.kt`), so every row is
+reachable; verified on the Shield with the Cameras tab scrolled past the old fold, showing Camera sound,
+Channel keys and both grid toggles.
+
+## Also built on 2026-11-12, in the same pass
+
+- **Rows that mean nothing are hidden**: `SettingDef.showIf` and the page and search filter on it. The
+  background rows already use it (no colour row when the background is a picture, and so on).
+- **The old dialog and its row renderers are deleted** (`SettingsMenuDialog` kept only `SettingsActions`,
+  `SettingDef.read`, `HelperStatusRow`, `LogSize`, `BuildInfo`). A second renderer meant a second set of
+  focus paths to keep correct; now there is one.
+- **Focus audit of the page** (2026-11-12, after three "the cursor disappeared" reports). Every exit from
+  every focusable element now names where it goes, or names `Cancel` where nothing exists:
+  rail ends pinned (first stays on itself, About → Advanced, Close → itself, and Up from Close → About);
+  rows: Left → rail, Right → Cancel, first row Up → search, last row Down → Cancel; search field: Left →
+  rail, Down → first row, Up and Right → itself; search results: Left → rail, Right and the last hit's
+  Down → Cancel, first hit Up → search; About: Left and Up → About rail item, Right → Cancel.
+  Verified on the TV: Up and Right on the search field left it focused, twelve Downs scrolled the page
+  with the cursor on screen, three Rights kept the row lit.
+- **Rows never lose the cursor**: Right from a row is pinned to `Cancel` (nothing lives to its right, so
+  geometry used to drop the focus somewhere invisible), and the last row's Down is pinned the same way.
+  Only Left (rail) and Up leave a row. Verified on the TV: three Rights left the row lit, twelve Downs
+  scrolled the page with the cursor still on screen.
+- **Shuffle can swap the sides**: `shuffle_sides` puts the camera left and the widgets right, or the other
+  way round, once per session — in addition to the random camera, top-bar order and card order. The camera
+  slot is extracted so the row can render either order without moving any other layout code.
+- **Rail ends are pinned**: Up from About goes to Advanced, Down on Close settings stays there, Up on the
+  first entry stays put. Only the ends are pinned — chaining every entry broke Down.
+
+## M7.1 — background (built)
+
+`LauncherPrefs` gained `backgroundKind` (none by default / colour / image), `backgroundColour`,
+`backgroundImage`, `backgroundFit` (fill, fit, stretch, tile, centre) and `backgroundScrim` (0..95 %,
+default 65). `LauncherBackground.kt` draws the layer behind everything — a colour, or a picture from the
+app's own `files/background.img`, copied in when picked so the original can move — and a black scrim over
+it. The launcher keeps its one dark scheme, so surfaces stay readable: this is decoration behind a dark
+room, not a light theme (which would need the 120 `MaterialTheme.colorScheme` call sites to branch).
+Rows are the Launcher section's "Background" group; the colour comes from a short palette dialog, the
+picture from the system file picker.
+
+Verified on the Shield: a colour background (#1C1B1F) and an image background both drew with the surface
+cards legible over them. Both test values were then put back to none.
+
+## M4 — Assistant device tiles (first slice)
+
+`isPickable` now includes `light`, `switch` and `fan`, so the Home Assistant dialog offers them and the
+Assistant tab renders them with the existing `ToggleRow` (OK switches them; a light or fan group shows its
+own card). Verified on the Shield: `light.all_lights` picked into the entities showed a **Light** card with
+a switch, "All Lights". The demo entity was then removed from Ema's setup.
+
+Brightness and fan speed are on the same row: `HaSession.setBrightness` (`light.turn_on` with
+`brightness_pct`) and `setPercentage` (`set_percentage`), `HaConnection.setLevel`, and Left/Right on a
+light's row step it by 10 %, with the level shown under the name while it is on. Built, **not yet seen on
+the device**: the test entity was written into the prefs while the app was rewriting them, so the card
+never appeared. Adding a light through the Home Assistant dialog's Sensors tab is the honest way to check
+it — it needs no pref surgery.
+
+The alarm tile is built: `alarm_control_panel` is pickable, its row shows the state, OK offers Arm home /
+Arm away / Disarm, and the one chosen asks for the code in a numeric field that is cleared the moment the
+call is made (`HaSession.alarm` puts it in `service_data.code` and nothing keeps it). Not yet seen on the
+device: the entity was staged into the prefs and lost to the same write-back race as the light — the honest
+way to add it is the Home Assistant dialog's Sensors tab.
+
+Still to build for M4: vacuum room cleaning from the entity's `rooms` attribute, and the generic service
+tile.
+
+## M7.3 — new events badge (built)
+
+`badge` (off by default, Cameras → Alerts → "New events badge") puts a red count beside the clock, from
+Frigate's `/api/review?severity=alert` list: how many events started after `badgeSeenAt`. Opening the
+Alerts tab sets that mark to now and the badge disappears; the first run seeds it to "now" so a fresh
+install does not greet anyone with 50.
+
+Verified on the Shield: before the seed, 50 alerts and a red **50** beside the clock; after seeding,
+`Badge: seen=… of 50 alerts, 0 new` and no badge.
+
+**A mistake worth remembering**: the first version built a new `FrigateClient` for every poll, which means
+a new login every minute — Frigate answered "too many failed logins, try again later" and the launcher's
+own alert feed stopped working for a few minutes. The poll now reuses `frigateFeed.client`, the connection
+the feed already holds. One client per server, however many callers.
+
+## M7.2 — shuffle, per session (built)
+
+`Shuffle.kt` holds one seed for the whole session: it is rolled when the launcher starts after the TV has
+been off longer than `SHUFFLE_SESSION_GAP_MS` (30 min) or after `shuffle_hours` of being left on, and
+otherwise the stored seed is reused, so a system force-stop mid-evening does not reshuffle. Per-area
+switches (`shuffle_camera`, `shuffle_actions`, `shuffle_cards`) plus `shuffle_hours` (0..24, 0 = a new
+session only) live under Home → Shuffle. The camera on Home takes the first of the session's order, the
+top-bar actions and the Assistant cards are reordered by the same seed with different salts, and the app
+row is untouched because favourites curate it.
+
+Verified on the Shield: with the three switches on and the timestamp cleared, a new seed was rolled
+(`-911068700`) and the Home camera became the doorbell; two starts 20 s apart logged
+`newSession=false … stored=1244843693` and kept the same order; the log line "Shuffle: last=… elapsed=…
+newSession=… hoursUp=…" makes every future report checkable. Not yet seen on the device: the N-hour
+re-roll (the pref write raced the app start), and the card order change visually.
+
+## Requested 2026-11-12, not built yet (M7)
+
+1. **Background**: a solid colour or an image, default as today. Cards, tabs and dialogs must stay
+   legible: the launcher keeps its dark scheme and every surface stays translucent over the background,
+   with a scrim whose strength is a setting, so white-on-white cannot happen. A light *theme* is a
+   separate, larger job (120 `MaterialTheme.colorScheme` call sites).
+2. **Shuffle**, as Ema specified: the order is rolled once **per session** — switching the TV on gives a
+   new order, and it stays put for that session — and optionally re-rolled after **N hours** of the TV
+   being left on, never while the remote is in use. Per-area switches (Home Assistant widgets, camera on
+   Home, top-bar actions); the app row stays put because favourites curate it.
+3. **App icons**: an override per app (an image from the TV's storage), stored with the app's key; the row
+   and the All apps page draw it instead of the banner/icon.
+4. **Notification badge**: a count or dot on the clock for new Frigate events since the launcher was last
+   opened, optional, with the source chosen in settings (Frigate events today; Home Assistant repairs or
+   unavailable entities later).
+
+## M6 — settings as a page (built, first pass)
+
+Status 2026-11-12: the dialog is replaced by `SettingsPage.kt`, a full-page surface with a rail of
+categories (icon + label), a search field, and the category's rows as cards under group headings. The
+schema gained `SettingDef.group`, so a card is a group of rows and a new setting is still one entry. The
+dialog's shared row helpers (`SettingDef.read`, `HelperStatusRow`, `LogSize`, `BuildInfo`) are `internal`
+now and used by the page.
+
+Verified on the Shield: the page opens from the cog onto the rail; Down moves the rail and picking a
+category swaps the page (Services shown with its three chevron rows); rows render a drawn switch, a
+`− 5 +` count and chevrons; the page uses the whole screen; Back closes it in one press and leaves the
+launcher as it was.
+
+Verified since: Left from any row returns to the rail in one press (a row far down a page has no rail
+item beside it, so geometry alone lost the focus — every row now names the rail as its Left target);
+right/OK on a rail item lands on the category's first row; the search field filters across categories
+with the section named beside each match; a count changes with left/right (Days ahead 3 → 4); and every
+door says what is behind it ("6 cameras", "4 chosen", "None chosen").
+
+### "The cursor disappears if you go down too much" (fixed in code, awaiting a clean device check)
+
+Two causes, both in the page's list:
+
+1. A card was **one lazy item holding all its rows**, so a group taller than the window could not scroll:
+   focus moved to a row below the fold and the list had no reason to move. There is now one lazy item
+   per row, and the card is drawn per row (rounded at its ends), so the focused row is always scrolled
+   into view.
+2. Each category shared **one scroll state**, so a new category opened scrolled to where the previous one
+   had been; its first row was then off-screen, `requestFocus()` on it failed, and the remote stayed on
+   the rail — which also explains "Right does nothing sometimes". Each category now has its own scroll
+   state (`key(section)`), and the first-row focus is retried over a few frames instead of once.
+
+Entry into the page was re-verified after the scroll fixes: the focus dump showed the focused node at
+`[552,212][1848,316]`, the first row of the content column, so Right/OK on the rail still lands there.
+
+The deep-down check could not be completed: the Shield's **Switch Access setup wizard**
+(`com.google.android.marvin.talkback/...switchaccesslegacy.setupwizard`) takes the foreground during
+repeated D-pad presses and steals focus from the launcher. That is a device-side accessibility app, not
+the launcher, and it is worth knowing when a "the cursor disappeared" report comes in: an overlay that
+takes focus looks exactly like a focus bug.
+
+Still to check on the device: flipping a switch from a row, and opening a choice row's list.
+
+Notes worth keeping:
+
+- **Back belongs to the Activity here**: `TopDialog`-based dialogs received Back themselves, but a page
+  inside the launcher's content does not — the launcher's own `BackHandler` now closes the page first,
+  before it moves focus around the Home tab.
+- **Up from About belongs on the rail**: picking About put the focus on its page's first element (the name
+  block), which was given `up = toSearch`, so Up left the rail and jumped to the search field. The About
+  page's first block now answers Up with the About rail item, so Up walks the rail like every other
+  category. (Fix compiled and installed; the on-device re-check was interrupted by Plexy taking the
+  foreground, so it is unconfirmed.)
+- **Picking a category lands on its first row, not the search field**: the first row cannot take focus
+  before the new page is laid out, so the request waits two frames; without that the focus fell through
+  to the search field above. Both OK on a rail item and Right from it enter the page (Ema asked for
+  both), which are the two things a two-pane layout is expected to answer.
+- **Up from the first row goes to the search field, left goes to the rail**: with the field above the rows
+  and the rail beside them, any other choice makes one of the three unreachable.
+- The old `SettingsMenuDialog` composable is still in the tree while the page is being finished; delete it
+  once the remaining interactions are verified, so the row renderers live in one place.
+
+## M6 — settings as a page (planned, not built)
+
+Ema's target, sketched from a desktop browser's settings: a full-page surface, a rail of categories with
+icons down the left, a search field across the top, and the chosen category's settings as cards on the
+right. The design review agreed and picked the same shape (its candidate B) over a single long page and
+over a card dashboard.
+
+Slices, each shippable on its own:
+
+1. **The frame**: `SettingsScreen.kt` — full-screen overlay replacing the dialog; rail from
+   `SettingSection` (icon + label), content pane scrolled, Back closes in one press.
+2. **Cards and groups**: `SettingDef.group` so a section's rows read as titled cards; rows restyled with
+   the control inline (switch, `- n +`, value + chevron).
+3. **Choices inline**: a choice row shows its value and opens a short list in place, no ContextMenu popup
+   in the middle of the screen.
+4. **Search**: one field filtering every row by title and description, with the section shown beside a
+   match; it also fixes "I know the setting exists, where is it".
+5. **Summaries on doors**: the four list editors (cameras, favourite apps, calendars, HA cameras) show
+   "6 chosen" / "Direct RTSP" on their row instead of being a cold door.
+
+Not in scope: moving the camera, HA, Frigate, calendar and favourites editors into the page — they need
+the width a dialog gives, and the page opens them as it does today.
+
+## Not doing: mini cameras or an alerts column beside a narrow camera
+
+Ema dropped the idea on 2026-11-12 (it was option 1c of the camera-card placement question). The gap a
+non-16:9 camera leaves is handled by **Cameras → Beside the camera**: leave it, centre the picture, or
+give it to the widgets. Do not resurrect the mini-preview/alerts column without asking again.
+
+## The Home tab's camera, and the Alerts tab (2026-11-12)
+
+- **Why the Home tab showed the Front camera**: the Home tab does not show the first camera in the
+  settings list, it shows the one the remote last switched to (`camera_selected`), and that was Front
+  from an earlier channel-up. New setting **Cameras → Home tab camera**: "First in the list" (the camera
+  dialog's order decides) or "Last switched to". The first attempt put the override *before* the saved
+  selection and was silently overwritten — it is now applied after it. Verified: `Player … started over
+  TCP, …, <camera-host>:8554/doorbell` with the porch on screen.
+- **The camera box takes the camera's own shape**, as Ema suggested: each camera remembers the ratio its
+  stream reports (`Camera.aspect`, stored in the cameras JSON), so the Home tab is laid out correctly
+  before the first frame arrives instead of after it; a camera not yet seen starts at 16:9 and is
+  corrected on its first frame, then remembered. The box is sized height-first for anything taller than
+  16:9 (`matchHeightConstraintsFirst`), which is what the first attempt got wrong: it applied a ratio
+  *inside* the caller's 16:9 slot, where nothing can shrink it. Verified: the doorbell stored
+  `aspect=1.3333` and the Home box became 4:3 with the pillars gone.
+- **The manual shape** is a cycling menu entry, "Shape: Auto / 16:9 / 4:3 / 1:1 / 5:4 / 21:9", stored in
+  `Camera.aspect` beside the learned value — a camera never seen has 0, and choosing Auto lets the stream
+  set it again. Verified on the TV: the menu read "Shape: 4:3" for the doorbell, the ratio it had learned.
+- **What fills the gap** a narrow picture leaves is a setting, **Cameras → Beside the camera**: "Leave the
+  gap" (default), "Centre the picture", "Wider widgets". The slot is sized from the camera's shape
+  (`maxHeight * shape`), so the picture is never letterboxed by its own slot. The panel is already
+  weighted, so "Wider widgets" is a minimum-width question rather than a resize. Mini camera previews and
+  a short alerts column in that space are not built.
+- **The Alerts tab** now asks whether it belongs: with no Frigate server configured it is hidden
+  whatever the setting says, and **Cameras → Alerts tab** hides it when Frigate *is* configured. The
+  colour keys follow the same list (`colorButtonTab(event, shownTabs)`), and hiding the tab you are on
+  moves to Home rather than leaving an invisible selection. Verified: with the toggle off the bar read
+  Home / Cameras / Assistant.
+
+## Cameras from Home Assistant (M3.5)
+
+A TV that may reach Home Assistant but must not be given the cameras' own addresses — no go2rtc, no
+Frigate UI, no RTSP logins — can now take its pictures from Home Assistant instead.
+
+### New file
+
+| File | What it is |
+|---|---|
+| `HaCameras.kt` | `HaCamera` (entity + name, stored as `entity|name`), `haCameraStreamUrl()` (websocket `camera/stream`, format `hls`, turned into an absolute playlist URL) and `haCameraStill()` / `rememberHaCameraStill()` (REST `api/camera_proxy`, a JPEG refreshed every ten seconds). |
+| `HaCamerasDialog.kt` | Which camera entities to show, in order: read from `getStates()` when it opens, OK chooses, left/right reorder — the calendar picker's shape. |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `Cameras.kt` | `Camera.haEntity`; `MainCamera`, `CameraGrid` and `FullScreenCamera` take the `HaServer` and hand it to `CameraView`; the grid draws a Home Assistant camera as `rememberHaCameraStill` (never a substream, never a red X — a still is the picture, not a failure). |
+| `CameraView.kt` | A camera with `haEntity` resolves Home Assistant's playlist on `attempt()` and plays it with `HlsMediaSource` and the TV's bearer token; the RTSP path is unchanged. `media3-exoplayer-hls` added. |
+| `LauncherPrefs.kt` | `cameraSource` (`direct` default, or `home_assistant`) and `haCameraEntities`. |
+| `SettingsSchema.kt` | Cameras section: "Cameras from" (choice) and "Home Assistant cameras" (list → picker). |
+| `MainActivity.kt` | The views take an effective list: the homemade cameras, or Home Assistant entities shaped into `Camera(id = "ha:<entity>", haEntity = …)`. |
+
+### Deliberate designs worth keeping
+
+- **One live picture, the rest stills**: Home Assistant's HLS costs a transcode on Home Assistant and a
+  decoder on the TV, so the grid shows the chosen camera live and the others as `camera/proxy` JPEGs,
+  refreshed every ten seconds. This is the "cheap path" a six-tile grid needs.
+- **The token stays on the TV**: the playlist and its segments are fetched with the TV's bearer token;
+  the seconds-long signed playlist URL is what Home Assistant hands out, not a camera address.
+- **Measured on the Shield**: Home Assistant source, doorbell live after 2.2–9.9 s depending on the
+  playlist fill (`Player 0 … live after 3003 ms`, `… 9904 ms`), grid stills fresh to the second. Direct
+  RTSP stays the default because it is ~2 s and costs nothing else: the TV is back on `direct`.
+
+## Fixed: every camera went black on 2026-11-12
+
+Symptom: all six cameras "Camera answered, but no picture came within 12 s", while Frigate and Home
+Assistant played them fine, in a retry loop, with the last picture saved on 10 Nov.
+
+Evidence, in order:
+
+- `ffprobe`/`ffmpeg` from another machine decoded the same RTSP URL (2560×1920 H.264, and a 4K HEVC
+  camera) with no errors, so the server, the stream and the credentials were fine.
+- The launcher's own camera test (CameraTest, an RTSP client of its own) connected, negotiated
+  interleaved TCP (channels 0-1 and 2-3), and received both audio (64 packets, first after 14 ms) and
+  video packets, with NAL types 1 5 7 8 — IDR frames present. So the TV's network and go2rtc were fine.
+- ExoPlayer alone got the description and no picture, on every camera, H.264 and H.265 alike.
+
+Cause: `sdpWithoutAudio` in `StreamDescription.kt`. When a camera's "Use audio track" was off — off on
+all six — the app edited the SDP to remove the `m=audio` section before handing it to the player. The
+cameras now advertise an AAC track (they did not before), so that rewrite started running on every
+stream and the player then never produced a frame. Nothing in the app changed on the 10th; the cameras'
+description did.
+
+Fix: the SDP is handed over untouched, and the audio is disabled through
+`TrackSelectionParameters.setTrackTypeDisabled(TRACK_TYPE_AUDIO, true)`, which is what silences it now
+(the log's "audio taken out" is gone; the `Player ... started over TCP, audio: off` line still shows the
+setting). Verified live: `Player ... live after 2239 ms`, picture on screen at 07:58, with the audio
+track described and unused. `sdpWithoutAudio` is deleted; `sdpTracks`/`sdpSections` stay for the test
+screen.
+
+Lesson for the ledger: never edit the stream description to change behaviour. Disable tracks through
+the player's own selection, whose surface is documented; every SDP field is someone else's contract.
+
+## Removed from upstream (re-apply after a rebase)
+
+| What | Why |
+|---|---|
+| The `CH` mark over the Home camera (`ChannelMark`, `channelHint`, `CHANNEL_HINT_*`, `lastChannelHint` in `Cameras.kt`) | A three-second hint that appeared when the selection landed on the camera, at most once an hour, so it looked like a glitch when it did. The behaviour it advertised stays, as `channel_keys` (on by default, Cameras section): the remote's CH up/down switches cameras from the Activity, not from the mark. |
+
+## The rule behind these settings
+
+Ema's rule, stated 2026-11-10 when the CH mark came up: **a user-visible behaviour is a setting, not a
+hardcoded choice** — even a behaviour he dislikes stays, wrapped in a toggle or a choice with a sane
+default. So a removal here is nearly always a new pref plus a schema row; the only things that should
+not be configurable are the renderers themselves and the schema that describes them.
+
+## M8 — the settings rail names the things the launcher reads, and the badge is a door (2026-11-13)
+
+Ema's ask: "the Assist tab should be in the sidebar and not nested inside the home assistant submenu …
+both frigate and home assistant should have their own group/subgroup". The Assistant tab's settings
+were a tab inside the Home Assistant dialog, and the two servers shared one `Services → Integrations`
+card.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `SettingsSchema.kt` | `SettingSection` is now `Launcher, Home, Assistant, Calendar, Cameras, HomeAssistant, Frigate, Advanced` — `Services` is gone. `SettingAction` became a sealed interface: `OpenAssistantTab(HaDialogTab)` carries the tab a row is about. New Assistant rows (`assistant_display`, `ha_section_columns`, `ha_bottom_row`, `home_display`, `ha_home_columns`, `ha_entities`, `ha_top_bar`, `ha_order`); `alerts_tab` moved to Frigate, `ping` to Advanced/Network; the badge left Frigate again in M9, when it stopped being Frigate's alone. |
+| `LauncherPrefs.kt` | `haDashboard`, `haHomeDashboard`, `haBottomRow`, `haSectionColumns`, `haHomeColumns`: one key each, implemented over `haDisplay` so the storage stays in one place and a page row can own a switch. |
+| `HomeAssistantDialog.kt` | `HaTab` → public `HaDialogTab`; `initialTab`; the bottom-row/columns switches and `BOTTOM_ROW`/`SECTION_COLUMNS` deleted; Save is `initialDisplay.copy(dashboard, homeDashboard)` so it cannot write back a stale layout. |
+| `SettingsMenuDialog.kt` | `openHomeAssistant: (HaDialogTab?) -> Unit`; `of()` maps the tab-carrying action. |
+| `SettingsPage.kt` | `sectionIcon` for the three new categories; door summaries for the new rows; rail padding tightened (item 9dp, column 12dp) so ten entries fit 540dp. |
+| `TopDialog.kt` | On open, the remote starts on the tab that is already selected, not on the leftmost. |
+| `MainActivity.kt` | `haDialogOpen` → `haDialogTab: HaDialogTab?`; `initialTab`; the dialog's Save bumps `settingsRevision`; `onSettingsChanged` and `applyImport` re-read `haDisplay`, `alertsTab`, `badge`. |
+| `HomeTopBar.kt` | `NewEventsBadge` is a focusable `Surface` (white pill when the remote is on it) that calls `onNewEvents`. |
+
+### Deliberate designs worth keeping
+
+- **A door carries where it lands**: `SettingAction.OpenAssistantTab(HaDialogTab.Sensors)` opens the
+  dialog it always did, on the tab the row promised. Splitting the 900-line dialog into four would
+  duplicate the login, the session and `EntityPicker`; the door gets the Assistant category into the
+  rail at a fraction of that risk. The pickers, the order and the dashboard choice need live
+  `getStates()`/`dashboards()`, a search field and per-entity press semantics — dialog material.
+- **A server has its own category**: Home Assistant holds the connection only; what its tab shows is
+  Assistant; Frigate holds the alerts tab and the badge. One card of "Integrations" made the pairing
+  invisible.
+- **One editor per setting**: the dialog's Dashboard tabs used to render the bottom-row and columns
+  switches as well as the page, and the dialog wrote its `initialDisplay` snapshot back on Save — a
+  page toggle made before opening it was silently reverted. The switches live on the page only, and
+  Save now rewrites just the two dashboards.
+- **Ten rail entries still fit**: item 38dp (9dp padding + a 20dp title), 24dp column padding, 36dp
+  header, 11 gaps of 2dp → 462dp of 540dp, so About and Close stay pinned at the bottom with the
+  weight spacer. A scrolling rail was rejected: focus into an off-screen item loses the cursor, which
+  is the bug fixed in M6.
+- **The badge leads to the alerts it counts.** The Shield's notification panel is
+  `com.google.android.tvlauncher/.notifications.NotificationsSidePanelActivity`: not exported, and the
+  implicit `com.android.tvlauncher.NOTIFICATIONS` / `com.android.tv.NOTIFICATIONS_PANEL` intents do not
+  resolve even from the shell UID. The TV has no status bar either (`dumpsys statusbar` reports no
+  icons, `cmd statusbar expand-notifications` changes nothing), so `StatusBarManager` would be a no-op.
+  No app on this device can open Android's own notifications. M9 adds the other way out — the launcher
+  draws the panel itself from a listener — and until it is switched on, OK on the count opens the
+  Alerts tab; when the count clears, focus moves to the Alerts tab button because the badge disappears.
+
+### Verified on the Shield (2026-11-13)
+
+- Rail shows Launcher, Home, Assistant, Calendar, Cameras, Home Assistant, Frigate, Advanced, About,
+  Close — all on screen, so nothing had to scroll.
+- Assistant renders "What the tab shows · My selection", "Beside the camera · My selection",
+  "Sensors, scenes and scripts · 5 chosen", "Actions in the top bar · 3 of 3".
+- OK on "Sensors, scenes and scripts" opens the dialog on the Sensors tab with the remote on that tab
+  (`TopDialog` change); the dashboard door opens on HA Tab with only dashboards listed.
+- "Alerts and apps below" toggled on the page appears on the Assistant tab with no restart; Save in
+  the dialog leaves it on (`ha_bottom_row=true` in `shared_prefs/launcher.xml` afterwards). Both were
+  put back: `ha_bottom_row=false`, `badge=true`, `alerts_tab=true`.
+- Search "badge" finds one row, labelled **Frigate**.
+- Badge: focusable, white when focused, OK opens the Alerts tab and the count clears.
+
+Not verified on the device: an export/import round-trip of the three new keys (they are `Toggle` rows,
+so `currentPreferences`/`applyPreferences` carry them by construction), and the dialog's login step
+when Home Assistant has no saved login.
+
+## M9 — the count can be the TV's notifications, and its panel (built, optional)
+
+The badge counted Frigate alerts only, and Android's own notification panel cannot be opened by another
+app on this box (M8). So the launcher reads the notifications itself and draws the panel: a
+`NotificationListenerService`, off until notification access is granted and until the count is pointed
+at it.
+
+### New files
+
+| File | What it is |
+|---|---|
+| `Notifications.kt` | `LauncherNotification` (app, title, text, time, ongoing), the `Notifications` store the UI reads (`entries`, `granted`, `open`, `clearAll`, `requestRebind`), and `LauncherNotificationListener`, which only reports: posted, removed, connected. A group summary is skipped; a notification with no title shows its app alone, not its package name. |
+| `NotificationsDialog.kt` | The panel: every live notification with its app, title, two lines of text and "5 min. ago"; OK opens what it came from and closes; "Clear all" dismisses the dismissible ones. With access off it says how to grant it, since the Shield's Settings has no screen for it. |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `AndroidManifest.xml` | `.LauncherNotificationListener`, exported, `BIND_NOTIFICATION_LISTENER_SERVICE`. |
+| `LauncherPrefs.kt` | `badgeSource` (`frigate` default, or `notifications`), keys `BADGE_SOURCE_*`. |
+| `SettingsSchema.kt` | The badge moved from Frigate to **Advanced → Top bar** (it is a top-bar indicator, and it no longer counts only Frigate), joined by `badge_source` ("The count is") and `notification_access` (a door to the panel, shown only for the notification source). **Fixed: all five `SettingDef` builders accepted `showIf` and dropped it**, so every `showIf` row in the schema was always visible — including the background rows FORK.md said were hidden. |
+| `SettingsMenuDialog.kt` | `openNotificationAccess`. |
+| `SettingsPage.kt` | `notification_access` says "Allowed" or "Not allowed". |
+| `HomeBoardApp.kt` | `instance`, for the label lookup and the "is it allowed" check. |
+| `MainActivity.kt` | `badgeSource` and `notificationsOpen` state; the count is the notification list's size when that is the source; OK opens the panel or the Alerts tab accordingly; the Frigate poll is skipped unless Frigate is what the count counts; both re-read lists carry `badgeSource`. |
+
+### Deliberate designs worth keeping
+
+- **The listener reports, the UI reads**: `Notifications.entries` is Compose state, so the panel and the
+  badge do not care whether the service is alive; a rebind is asked for when the panel opens, which is
+  what makes a grant made while the app was running take effect without a restart.
+- **No invented action**: a notification with no `contentIntent` (a foreground service's, most of them)
+  does nothing and logs why. Rows are not dimmed, because whether they open something is not knowable
+  before pressing.
+- **Granting is a shell command on this TV**: `com.android.tv.settings` has no notification-access
+  activity, so the panel prints `adb shell cmd notification allow_listener
+  com.evofactory.homeboard/.LauncherNotificationListener`. Android binds the listener at once.
+- **Off by default**: `badge_source` is `frigate`, so a fresh install behaves exactly as before.
+
+### Verified on the Shield (2026-11-13)
+
+- `cmd notification allow_listener` bound the service (`enabled_notification_listeners` lists it).
+- With the count on **Android notifications**, the badge showed **10** (the live notifications), and OK
+  on it opened the panel listing them: QuickBars, SHIELD Experience Upgrade, Spotify, tvQuickActions ×2,
+  AirReceiver, SMB Server, Dolby, with app names and "2 days ago" / "2 hours ago".
+- OK on AirReceiver's entry launched `com.softmedia.receiver/...MainTvActivity`, so `contentIntent.send()`
+  works; OK on QuickBars' entry did nothing and logged "dev.trooped.tvquickbars has no content intent".
+- Back to **Frigate events**: the badge disappeared at 0 new alerts and the notifications panel stopped
+  opening from it (a stale process made one earlier press ambiguous; a clean restart settled it).
+- The `showIf` fix shows: with the Frigate source the "Notification access" row is hidden, with the
+  notification source it appears saying "Allowed"; the background colour/picture rows follow the same rule.
+
+Left as it was: `badge_source=frigate`, `badge=true`, `alerts_tab=true`. Notification access is
+**granted** for HomeBoard on this Shield (revoke with `adb shell cmd notification disallow_listener
+com.evofactory.homeboard/.LauncherNotificationListener`).
+
+## M10 — the dialogs tell the truth, the tabs fit, and the alerts have a dot (2026-11-13)
+
+Ema's list: the Save button read as disabled, the dashboard list offered the same choice twice, the
+dashboard's view tabs spilled over the clock, the notification count should be a dot on the Alerts tab,
+and the settings needed a coherence pass.
+
+### What was wrong, and what changed
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Save looked disabled | `primary` was the library default, which is dim next to the outlined buttons; and the button never said whether there was anything to save | `DialogButton.highlight`: a primary button is filled in `SwitchOn` (blue) **only** when there is a change, and outlined otherwise (identical to Log out when there is nothing to do). `dirty` in `HomeAssistantDialog` compares the normalised address, the login, the chosen entities, the top bar and both dashboards |
+| Option 2 of the dashboards saved as option 1 | Home Assistant lists its default dashboard twice — as the list's `<default>` and again under `lovelace`, the path its own URL uses. Worse, "the default dashboard" and "my selection" were both stored as an empty value | `HA_DEFAULT_DASHBOARD_PATH` + `canonicalDashboardKey`; `dashboards()` skips the alias; `ha_dashboard` absent is "my selection", `""` is Home Assistant's own dashboard, and the dialog's `dirty` compares them as nullable |
+| A tab title wrapped over the clock | the view-tab row was a plain `Row`: no scroll, no width cap, and the text wrapped to two lines past the screen's edge | `LazyRow`, each tab capped at 240dp, `TabButton`'s text one line with an ellipsis. Verified: walking right scrolls the row, "Bedroom & En-Suite" lands fully on screen |
+| The count offered "Frigate events / Android notifications" | a second count source, which is not what a TV wants: a dot says enough | The choice is gone. `alerts_dot` (on by default) puts a dot on the Alerts tab while there are alerts nobody has looked at; **Frigate → Alerts → "Mark the alerts as reviewed"** clears the dot and the count without opening the tab. The notifications panel stays, as Advanced → Notifications |
+
+### Coherence pass (from an independent review of the whole settings surface)
+
+- **Search results could not be reached**: Down from the field pointed at an uninitialised `FocusRequester`, and the hit rows carried two requesters on one node. `SearchResults` now takes the page's `first`, attaches it to the first hit only, and Down from the field lands on it (verified with a focus dump).
+- **Three camera rows changed nothing on screen** until a restart: `cameraSource`, `cameraSide` and `homeCameraStart` were missing from `onSettingsChanged` (and `cameraSide` from `applyImport`). Re-reading was only half of it for "Camera on Home": the override used to run at start only, so `applyHomeCameraStart()` now runs at start, after a settings write and after an import, and it settles both values ("First in the list" selects the first camera, "Last switched to" the saved one).
+- **Indicators that could never show**: "New events badge" is hidden while the Alerts tab is off, and "Mark the alerts as reviewed" only shows when a dot or the count is on.
+- **The notifications row lost its status**: `rowSummary` still matched the old key `notification_access`; the row is `notifications` and says "Allowed" or "Not allowed" again.
+- **Dead weight removed**: `SettingAction.OpenAccessibilitySettings` (no row used it), its `SettingsActions` hook, `SettingsPage`'s unused `onOpenAccessibility` on `SettingPageRow`, and `SettingKind.Info` (no Info row exists, so the kind, its render branch and its `read` fall-through were unreachable).
+- **The dashboard choices now travel in an export**: they are doors, not rows, so `currentPreferences`/`applyPreferences` carry them under `ha_dashboard_choice` / `ha_home_dashboard_choice`. A `null` dashboard is left out, since an absent key means it.
+- **Down stopped dead at "Favourite apps"**: the "last row of the page" pin (which stops the remote leaving the list) compared against the schema's last row, but cards are drawn in the order their first row appears and `favourite_apps` is defined last while it renders in the middle card. Its Down was cancelled, and the two cards below it were unreachable from above. The pin now uses the last row of the last *group*, i.e. what is at the bottom of the page.
+- **`showIf` itself was dead** (found in M9): all five `SettingDef` builders accepted it and dropped it. With it fixed, the background rows and the new ones follow their conditions — verified: with the colour background only Colour and Darkness show.
+
+### Verified on the Shield (2026-11-13)
+
+- Save: outlined with nothing to do, blue `#5A8FD9` once a dashboard is chosen, and the focused fill is the dark variant (`13,26,44` sampled). Sampling `Log out` and `Save` in the unchanged state gave the same fill, so the two read as the same weight while nothing is pending.
+- Dashboard list: one "Overview" and "Config" (`Dashboards: <default>|Overview, lovelace-config|Config`). Choosing the default and saving writes `ha_dashboard=""`; choosing "My selection" and saving removes the key.
+- View tabs: single line, ellipsis, and the row scrolls to the focused tab.
+- Dot: with `badge_seen_at` moved two days back, the dot appeared on the Alerts tab (and the badge said 50); "Mark the alerts as reviewed" cleared both and wrote `badge_seen_at` to now.
+- Search: "badge" finds Advanced → New events badge, and Down from the field focuses the hit.
+- Home page, Down: "Favourite apps" → "Sensors card" (focus dump moved from `[552,462–562]` to `[552,630–734]`), while five Downs on "Scroll direction", the page's real bottom row, leave the focus there rather than losing it.
+- "Camera on Home": changed from "Last switched to" to "First in the list" with the launcher open; the Home picture became the doorbell and the log showed a new `Player … started over TCP, …, <camera-host>:8554/doorbell` seconds later, no restart. The preferred value was then put back to `first`.
+
+Left as it was: `badge=true`, `alerts_tab=true`, `alerts_dot` unset (on), `ha_bottom_row=false`, `ha_home_columns=true`, `ha_section_columns=false`, `ha_dashboard` absent (My selection).
+
+## M11 — no more "Home Tab" and "HA Tab": one part at a time, named like its row (2026-11-13)
+
+Ema: "I don't understand what is 'Home Tab' and 'HA Tab' ... feels like this submenu could be a section
+of the assistant settings". Right on both counts. The dialog's five tabs were named for the code, and a
+row opened the dialog *on* one of them while the other four sat there to be guessed at.
+
+### What changed
+
+- **The Home Assistant dialog has no tabs.** Each settings row opens one part, and the title says
+  which: `Home Assistant · Assistant tab`, `Home Assistant · Devices`, `Home Assistant · Top bar`,
+  `Home Assistant · Order`, `Home Assistant · Home tab`. Log out, Save and the X stay in the top row;
+  the remote starts on the part's first item (`TopDialog.openFocus`, asked for over two frames).
+- **The parts are named for their rows**: `HaDialogTab` labels went from `Home Tab` / `HA Tab` /
+  `Sensors` / `Actions` / `Order` to `Assistant tab` / `Home tab` / `Devices` / `Top bar` / `Order`,
+  and every description that said "the other tabs" now says "Devices" or "the Order part".
+- **The Assistant section carries the layout choices, in the same words as the dialog** ("What the
+  Assistant tab shows", "What the Home tab shows"), so the row and the dialog title cannot disagree.
+
+### The same class of confusion elsewhere, fixed in the same pass
+
+Renaming only; every key is unchanged, so an export file still reads.
+
+| Was | Now | Why |
+|---|---|---|
+| Home → Shuffle → "Camera on Home" | "Different camera each session" | two rows in the app were called "Camera on Home" (this one and Cameras → Home tab) |
+| Home → Shuffle → "Again after" | "Reshuffle after" | "after what" |
+| Home → Rows → "Frigate events" | "Alert strip" | it toggles the strip on Home, not Frigate |
+| Home → All apps page → "Lines" | "Per line" | "lines" of what |
+| Cameras → "Cameras" (row in the "Cameras" card) | "Camera list" | three "Cameras" in a row |
+| Cameras → Source → "Pictures come from" | "Where the pictures come from" | a label doing a sentence's job |
+| Cameras → Keys and sound → "Sound" | "Camera sound" | there is a microphone in the house |
+| Calendar → "Calendars" (row in the "Calendars" card) | "Which calendars" | one word for the card and the list it edits |
+| Calendar → Display → "Order" | "Sort by" | "order" is also an Assistant part |
+| Assistant → "Sensors, scenes and scripts" | "Which devices" | matches the dialog's Devices part |
+| Assistant → "Actions in the top bar" | "Also in the top bar" | says what it does to the chosen devices |
+| Advanced → "The TV's notifications" | "Notifications panel" | the row opens a panel |
+
+Also: rows in `AllSettings` are ordered as they appear on screen (`favourite_apps` and
+`show_free_memory` sat at the end of their sections while drawing in the middle cards — which is what
+made the Down pin land mid-page, see M10).
+
+### Verified on the Shield (2026-11-13)
+
+- Assistant section reads: Assistant tab — What the Assistant tab shows · Rooms side by side · Alerts
+  and apps below; Home tab — What the Home tab shows · Rooms side by side; Devices and actions — Which
+  devices · Also in the top bar · Order.
+- "What the Assistant tab shows" opens `Home Assistant · Assistant tab` with no tab bar, focus on "My
+  selection", and the same description the row promised.
+- "Which devices" opens `Home Assistant · Devices`: search field on top, focus on the first device
+  (Weather, ticked), Log out / Save / X above.
+- Home section: Shuffle and Rows cards read with the new names; every switch still shows its stored
+  value (`shuffle_*` false, as Ema has them).
+
+## M12 — each tab its own devices, one place per setting, and the truth about "wider widgets" (2026-11-13)
+
+Ema's list, after M11: split the entity choice between the tabs, choose a sensible Assistant set for him,
+make the calendar pickers usable, get the screensaver out of the cameras, stop hiding Home-tab settings
+inside Cameras, use Frigate's mark, and stop the Advanced page shouting.
+
+### Choices
+
+- **Two entity lists.** `ha_entities` is what the Assistant tab shows; `ha_home_entities` is what sits beside
+  the camera. The dialog gained the part **Devices beside the camera** (a picker over the same devices, and
+  picking one there adds it to the tab's list if it wasn't). Absent, the new list falls back to what the Home
+  panel used to show (the tab's list without scenes and scripts), so an older setup is unchanged.
+  `saveHaChoice(entities, homeEntities, topBar)` writes all three; the export carries
+  `ha_home_entities` (a door has no value of its own to read).
+- **Ema's Assistant tab, chosen from the live states**: living room readings (TRV temperature and humidity,
+  PM2.5 and air quality, presence illumination, presence group), `light.living_room_lights`, and the scripts he
+  actually uses (Good Night, Good Morning, Start Plex, Start Plezy, Start Moonlight, Find my remote, Show CCTV),
+  beside the perimeter, bedroom temperature, weather and alarm that were already there. The Home panel's own
+  five: the three living-room readings, presence and the lights.
+- **Calendar pickers say what OK does.** `CalendarPickerDialog`: OK opens a menu — *Include it / Leave it out*,
+  *Move up / Move down* with the priority each would give. `CalendarColoursDialog`: OK opens the palette by name
+  with the current colour ticked. Left and right still cycle, but nothing depends on discovering that.
+- **The screensaver left the camera dialog.** It is the launcher's, so it has its own `ScreensaverDialog` (time
+  per camera, which cameras, progress, a button to the TV's screensaver screen) and a row in Launcher,
+  *How it plays*. `CamerasTab` lost the tab, and with it the duplicated state.
+- **"Camera on Home" and "Space beside the camera" moved to Home**, under *Camera beside the cards*, where the
+  tab they configure lives.
+- **"Wider widgets" did nothing at all**: `CAMERA_SIDE_WIDER` was never read in the layout, and the panel always
+  took the rest of the width, so it and "Leave the gap" were the same picture. The row now decides: *Leave the
+  gap* keeps the panel at `SidePanelWidth` with the space empty, *Centre the picture* keeps that width and
+  centres the picture in its own weighted box, *Wider widgets* gives the panel the rest.
+- **Frigate's own mark** in the rail: `res/drawable/frigate_logo.xml`, the single-path bird from the project's
+  branding SVG, drawn instead of the generic shield.
+- **Advanced stops shouting.** The home helper is one line (dot, what it is, its two buttons) with the long
+  explanation only when it is asked for and not running; the version and build no longer repeat what the About
+  page says; the notifications row says **Allowed** or **Not allowed** beside it.
+- **The connection row opens the connection.** *Home Assistant → Address and login* passes `connectionFirst`,
+  so the dialog shows the address and login rather than whatever part it happened to default to.
+
+### Incident, recorded because it cost the TV its settings for a few minutes
+
+Writing prefs from the host while the launcher is the home app is a race: Android restarts it the moment it is
+force-stopped, and the restart reads the file before the write lands. One write went through a 0-byte temp file
+and left the prefs with 4 of 65 keys. They were restored from the copy taken before the seed (65 keys, the same
+values Ema had at 01:20), the app restarted onto it, and the Home tab came back with its camera, calendar,
+favourites and Alerts tab. Nothing of his was rewritten by hand; the only values that changed are the two entity
+lists above.
+
+### Verified on the Shield (2026-11-13, 01:20–01:50)
+
+- Assistant tab draws the new set by room: Living Room (19 °C, 49 %, PM2.5, air quality, illumination, presence,
+  lights with a switch) and Scripts (Find my remote, Good Night, Good Morning, Start Plex, Start Plezy).
+- Rail: Frigate carries its own mark; Launcher → *How it plays*; Advanced → *Notifications panel · Allowed*.
+- Home, `camera_side=left`: camera at 4:3 on the left, the gap, then the calendar panel at its own width.
+- Not yet seen on the device: the calendar menus, the screensaver dialog, the connection-first door, and
+  `camera_side=wider` (the change is in, the picture was not taken before the prefs incident).
+
+## M13 — the entities he actually wants, named on screen, and a connection that isn't a submenu (2026-11-13)
+
+### The selection, changed as asked
+
+`ha_entities` (the Assistant tab) lost the illumination, PM2.5, *Start Plex*, the all-lights group and the
+presence binary sensor, and gained the three living-room lights, the air purifier and both robots. It is now:
+Perimeter, living-room Temperature, Humidity and Air quality, Main light, Stand, LED strip, Air purifier,
+Yiko and Baka, Outside (weather), Bedroom temperature, Alarm, and the scripts Show CCTV, Find my remote,
+Good night, Good morning, Start Plezy, Start Moonlight. `ha_home_entities` (beside the camera) is Temperature,
+Humidity, Main light, Stand and Air purifier.
+
+Note for the next person: the stand is **`light.living_room_stand`**. `light.living_room_lights_stand` does not
+exist — a first pass used it because the states dump has `…lights_stand_big`, `…lights_stand_small` and `…stand`
+side by side, and the row rendered the raw id until it was corrected.
+
+### Names on screen, without touching an id
+
+- `ha_entity_names` holds "entity_id=Label" lines, and `EntityNames` applies them inside `HaEntity.name`, so
+  every surface that draws a name (cards, rows, the top bar, the picker) uses them with one change. Home
+  Assistant is never called, and no entity id is ever written.
+- Seeded for the chosen entities: Temperature, Humidity, Air quality, Main light, Stand, LED strip, Air purifier,
+  Yiko, Baka, Perimeter, Outside, Bedroom, Alarm, Show CCTV, Find my remote, Good night, Good morning,
+  Start Plezy, Start Moonlight.
+- Editable on the TV: Assistant → Devices and actions → **Names on screen** (`EntityNamesDialog`, a list twice
+  the height of the tape and a text field per row; blank clears the label).
+
+### A vacuum is not a light
+
+`vacuum` is pickable now, and `VacuumRow` shows what the robot is doing with OK opening the services that apply
+(Start, Pause, Return to dock — a docked robot isn't offered a dock). `HaConnection.vacuum` sends them. Cards
+whose entities have no room no longer title themselves after the domain: `alarm_control_panel` reads **Alarm**,
+`vacuum` **Robots**, `fan` **Fans**, `light` **Lights**.
+
+### The Home Assistant section is a connection, not a door
+
+Three rows where there was one: **Address** (its own text dialog, `HaAddressDialog`; saving a new address ends
+the login that belonged to the old one), **Log in** (the same dialog, opening on its connection step) and
+**Log out**. The five-part editor is only reached from the rows that are about one of its parts.
+
+### Written to the TV with checks, after M12's incident
+
+Every prefs write this time: read the file, assert it is over 14 000 bytes, build the edit, assert the file
+grew and still holds `ha_entities`, `ha_home_entities`, `favourite_apps`, `cameras` and `ha_url`, copy, then
+read it back and assert the key count. The verify of one pass caught nothing, which is the point.
+
+### Verified on the Shield (2026-11-13, 02:43–02:50)
+
+- Assistant tab: Sensors → Perimeter · All closed; weather; Cave → Start Moonlight; Living Room → Temperature
+  18.9 °C, Humidity 49 %, Air quality excellent, Main light, **Stand 14 %**, **LED strip 80 %**, Air purifier,
+  **Yiko Docked**, Show CCTV; Bedroom → Baka Docked, Bedroom 18.1 °C; Alarm · armed home; Scripts → Find my
+  remote, Good night, Good morning, Start Plezy. Every label is the launcher's own.
+- Card titles: "Alarm", "Lights" — no domain names on screen.
+- Not seen on the device yet: the three connection rows, *Names on screen*, and the vacuum menu (the D-pad
+  run landed on Network status instead, and it was 02:50).
+
+## M14 — the two device lists are two lists, and every door opens where it says (2026-11-13)
+
+### Fixed, in his words
+
+- **Shuffle speaks plainly**: "Shuffle the camera" (a different camera on the Home tab each session),
+  "Shuffle the top bar", "Swap the camera and widgets", "Shuffle the Assistant cards", "New order after N
+  hours, 0 rolls once per session". The rows say what changes and when; "resession", "again after" and
+  "actions" are gone.
+- **Log in opened the wrong screen.** The action mapped a null tab to `Home`, so the row landed on the Home
+  tab's layout choice. There is now a `connectionFirst` flag and a dedicated `OpenHaLogin`, and the dialog
+  opens on the address and login (screenshot: address, "Log in with Username and password / Access token",
+  Connect).
+- **The two device lists are finally two lists.** The dialog's parts are `Assistant tab · what it shows`,
+  `Assistant tab · devices`, `Home tab · what it shows`, `Home tab · devices`, `Top bar`, `Order`, and the
+  settings rows use the same words under the two cards *Assistant tab* and *Home tab*. The Home list is
+  **no longer a subset** of the tab's: picking there changes only that list, a device can sit beside the
+  camera without being on the tab, and the Home part carries a **Same as the Assistant tab** button that
+  copies the tab's list over (the hint then says they match). Save writes the two lists separately.
+- **The scripts that only work on this TV are out**: Show CCTV, Find my remote, Start Plezy and Start
+  Moonlight left the Assistant tab and the top bar — the launcher already has the cameras, and it is the
+  screen those apps would start on. Good night and Good morning stay; they act on the house, not the TV.
+- **Log out asks first**: a confirmation naming what happens ("The TV's login is ended in Home Assistant's
+  own profile"), Cancel in front, Log out in the accent.
+- **The home helper is a row**: Launcher → Home button → *Home helper*, with its state beside it
+  ("Not needed: this is the TV's home app"), opening a dialog with the explanation and only the buttons that
+  apply. The four-line block at the bottom of Advanced is gone, and with it the special-cased composable.
+- **The Notifications section is a section**: *Access · Allowed* and *Notifications panel · 8 showing*, both
+  stating their state before you press them.
+
+### Verified with screenshots (the launcher's own rendering, not a claim)
+
+- Assistant tab: Perimeter, weather, Living Room (Temperature, Humidity, Air quality, Main light, Stand,
+  LED strip, Air purifier, Yiko), Bedroom (Baka, Bedroom), Alarm, Scripts (Good night, Good morning) — no
+  CCTV or app-launching buttons.
+- Settings → Assistant: *Assistant tab* card = What it shows · Rooms side by side · Alerts and apps below ·
+  Devices on it (13 chosen); *Home tab* card = What it shows · Rooms side by side · Devices beside the
+  camera (5 beside the camera).
+- *Home tab · devices* opens as its own dialog: search, every device with its label, the **Same as the
+  Assistant tab** button, and the hint "OK selects · 5 beside the camera · the first button copies the
+  Assistant tab's list".
+- *Log in* opens the connection dialog; *Log out* opens the confirmation (cancelled, not confirmed).
+- Launcher → *Home helper · Not needed: this is the TV's home app* opens the helper dialog.
+- Advanced → Notifications: Access "Allowed", panel "8 showing".
+
+## M15 — Frigate's mark stays Frigate's mark (2026-11-13)
+
+The rail icon is Frigate's own path from `docs/static/img/branding/logo.svg` (Apache-2.0), and it is the
+bird: **no badge**. Two things were tried on it and one was rejected:
+
+1. A badge behind it — a disc in the launcher's blue with the bird knocked out. Legible, and wrong: it turned
+   a product's mark into an app tile. Ema: "you actually had the right icon before". Reverted.
+2. What stayed: the path is **filled and lightly stroked** (`strokeWidth` 18 of the 512 viewport, round
+   joins), which keeps the fine silhouette from thinning out at rail size, and the rail draws it at **22dp**
+   instead of 20, tinted like every other icon (`onSurface`, `inverseOnSurface` when the row is focused).
+
+Verified in both rail states: on the dark rail the bird holds its shape, and on the focused light row the
+dark tint reads as clearly as the Home or Cameras glyphs beside it.

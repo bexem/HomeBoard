@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -74,16 +76,95 @@ class MainActivity : ComponentActivity() {
     private var minimizeVideoStreams by mutableStateOf(false)
     private var selectedCamera by mutableStateOf("")
     private var tab by mutableStateOf(HomeTab.Home)
-    private var haDialogOpen by mutableStateOf(false)
+    // Which tab of the Home Assistant dialog is open; null when it is closed
+    private var haDialogTab by mutableStateOf<HaDialogTab?>(null)
     private var haServer by mutableStateOf(HaServer(""))
     // Everything on the Assistant tab in its order, and the actions also in the top bar
     private var haEntities by mutableStateOf(emptyList<String>())
+    private var haHomeEntities by mutableStateOf(emptyList<String>())
     private var haTopBar by mutableStateOf(emptyList<String>())
     // The Home Assistant dashboard the Assistant tab shows instead, if any
     private var haDisplay by mutableStateOf(HaDisplay())
     private var frigate by mutableStateOf(FrigateServer())
     private var frigateOpen by mutableStateOf(false)
     private var settingsOpen by mutableStateOf(false)
+    // Counts every settings write, so the page re-reads its values
+    private var settingsRevision by mutableIntStateOf(0)
+    private var backgroundColourOpen by mutableStateOf(false)
+    // This session's order, rolled once: nothing moves again until the TV has been off, or the hours are up
+    private var shuffleSeed by mutableIntStateOf(0)
+    private var shuffleCamera by mutableStateOf(false)
+    private var shuffleActions by mutableStateOf(false)
+    private var shuffleCards by mutableStateOf(false)
+    private var shuffleSides by mutableStateOf(false)
+    private var badge by mutableStateOf(false)
+    // The dot on the Alerts tab, and the count beside the clock, both from the same read
+    private var alertsDot by mutableStateOf(true)
+    private var notificationsOpen by mutableStateOf(false)
+    private var screensaverOpen by mutableStateOf(false)
+    private var entityNamesOpen by mutableStateOf(false)
+    private var haAddressOpen by mutableStateOf(false)
+    private var haConnectFirst by mutableStateOf(false)
+    private var homeHelperOpen by mutableStateOf(false)
+    private var logoutConfirm by mutableStateOf(false)
+    private var newEvents by mutableIntStateOf(0)
+    // The app whose icon is being chosen, and a counter that makes the tiles read the overrides again
+    private var iconFor by mutableStateOf<InstalledApp?>(null)
+    private var iconVersion by mutableIntStateOf(0)
+    private var backgroundVersion by mutableIntStateOf(0)
+    // A picture from this TV's storage; copied in, so moving or deleting the original changes nothing
+    private val iconPick = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val app = iconFor
+        iconFor = null
+        if (uri != null && app != null) {
+            lifecycleScope.launch {
+                val copied = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val file = java.io.File(filesDir, "icons/${app.key}.img")
+                        file.parentFile?.mkdirs()
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            file.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        file.path
+                    }.onFailure { AppLog.w("Icons", "Can't copy the picture", it) }.getOrNull()
+                }
+                if (copied != null) {
+                    val entries = prefs.appIcons.filterNot { it.substringBefore('=') == app.key } + "${app.key}=$copied"
+                    prefs.appIcons = entries
+                    appIconOverrides = entries.associate { it.substringBefore('=') to it.substringAfter('=') }
+                    iconVersion++
+                } else {
+                    android.widget.Toast.makeText(this@MainActivity, "Couldn't read that file", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    private val backgroundPick = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            lifecycleScope.launch {
+                val copied = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val target = java.io.File(filesDir, "background.img")
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            target.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        target.path
+                    }.onFailure { AppLog.w("Background", "Can't copy the picture", it) }.getOrNull()
+                }
+                if (copied != null) {
+                    prefs.backgroundImage = copied
+                    prefs.backgroundKind = BACKGROUND_IMAGE
+                    backgroundVersion++
+                } else {
+                    android.widget.Toast.makeText(this@MainActivity, "Couldn't read that file", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    private var favouritesOpen by mutableStateOf(false)
+    private var allAppsOpen by mutableStateOf(false)
+    // The tile to come back to once the page closes
+    private var allAppsReturnKey by mutableStateOf<String?>(null)
     private var stuckPlayersOpen by mutableStateOf(false)
     private var replaceHome by mutableStateOf(false)
     private var catchHomeKey by mutableStateOf(false)
@@ -94,6 +175,27 @@ class MainActivity : ComponentActivity() {
     private var watchNext by mutableStateOf(emptyList<WatchItem>())
     private var watchNextReadAt by mutableStateOf(0L)
     private var hiddenWatching by mutableStateOf(emptyList<String>())
+    // The Home tab's own settings: read here, changed from the settings menu
+    private var homeAlertsRow by mutableStateOf(false)
+    private var continueWatching by mutableStateOf(true)
+    private var appRowWrap by mutableStateOf(true)
+    private var allAppsTile by mutableStateOf(true)
+    private var allAppsLines by mutableStateOf(ALL_APPS_LINES_DEFAULT)
+    private var allAppsVertical by mutableStateOf(false)
+    private var favourites by mutableStateOf(emptyList<String>())
+    private var hidePhoneApps by mutableStateOf(false)
+    private var homeSensors by mutableStateOf(true)
+    private var channelKeys by mutableStateOf(true)
+    private var cameraSound by mutableStateOf(CAMERA_SOUND_FULLSCREEN)
+    private var calendarsOpen by mutableStateOf(false)
+    private var calendarColoursOpen by mutableStateOf(false)
+    private var haCamerasOpen by mutableStateOf(false)
+    private var cameraSource by mutableStateOf(CAMERAS_DIRECT)
+    private var homeCameraStart by mutableStateOf(HOME_CAMERA_LAST)
+    private var alertsTab by mutableStateOf(true)
+    private var cameraSide by mutableStateOf(CAMERA_SIDE_LEFT)
+    private var haCameras by mutableStateOf(emptyList<HaCamera>())
+    private var calendarConfig by mutableStateOf(CalendarConfig())
 
     // Home override's crash guard: the launcher counts as started once it has stayed up a moment
     private val confirmStarted = Runnable {
@@ -108,26 +210,93 @@ class MainActivity : ComponentActivity() {
         order = prefs.order
         hidden = prefs.hidden
         cameras = prefs.cameras
+        cameraSource = prefs.cameraSource
+        homeCameraStart = prefs.homeCameraStart
+        alertsTab = prefs.alertsTab
+        cameraSide = prefs.cameraSide
+        haCameras = haCamerasFromPrefs(prefs.haCameraEntities)
         cameraGridLive = prefs.cameraGridLive
         minimizeVideoStreams = prefs.minimizeVideoStreams
         selectedCamera = prefs.selectedCamera
+        // After the saved selection, or the override is overwritten
+        applyHomeCameraStart()
         haServer = HaServer(prefs.haUrl, prefs.haToken, prefs.haRefreshToken)
         haEntities = prefs.haEntities
+        haHomeEntities = prefs.haHomeEntities
+        EntityNames.load(prefs)
         haTopBar = prefs.haTopBar
         haDisplay = prefs.haDisplay
         frigate = prefs.frigate
         hiddenWatching = prefs.hiddenWatching
+        homeAlertsRow = prefs.homeAlertsRow
+        continueWatching = prefs.continueWatching
+        appRowWrap = prefs.appRowWrap
+        allAppsTile = prefs.allAppsTile
+        allAppsLines = prefs.allAppsLines
+        allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
+        favourites = prefs.favouriteApps
+        hidePhoneApps = prefs.hidePhoneApps
+        homeSensors = prefs.homeSensors
+        shuffleCamera = prefs.shuffleCamera
+        shuffleActions = prefs.shuffleActions
+        shuffleCards = prefs.shuffleCards
+        shuffleSides = prefs.shuffleSides
+        badge = prefs.badge
+        alertsDot = prefs.alertsDot
+        appIconOverrides = prefs.appIcons.associate { it.substringBefore('=') to it.substringAfter('=') }
+        shuffleSeed = Shuffle.rollIfDue(prefs)
+        channelKeys = prefs.channelKeys
+        cameraSound = prefs.cameraSound
+        calendarConfig = prefs.calendarConfig()
+        AppLog.i(
+            "App",
+            "Camera sound: $cameraSound, calendars: ${calendarConfig.entities.size}, " +
+                "grouping: ${calendarConfig.grouping}, sensors: $homeSensors",
+        )
         // Android stops asking by itself after it's been refused. Answering comes back to onResume.
         if (!canReadWatchNext()) requestPermissions(arrayOf(READ_TV_LISTINGS), 0)
         setContent {
             MaterialTheme(colorScheme = AppColorScheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val all = installed
+                    // Behind every screen: nothing, a colour, or a picture, under a darkness setting
+                    LauncherBackgroundLayer(prefs)
+                    // Phone-only apps are dropped at the source, so every view and menu agrees
+                    val all = remember(installed, hidePhoneApps) {
+                        installed?.filter { !hidePhoneApps || it.isTvApp }
+                    }
                     val visible = remember(all, order, hidden) { all?.let { arrange(it, order, hidden) } }
                     val hiddenApps = remember(all, hidden) {
                         all?.let { apps -> hidden.mapNotNull { key -> apps.find { it.key == key } } }
                     }
-                    val camera = cameras.find { it.id == selectedCamera } ?: cameras.firstOrNull()
+                    // Alerts has nothing to show without a Frigate server, and can be hidden anyway
+                    val shownTabs = remember(alertsTab, frigate) {
+                        HomeTab.entries.filterNot { it == HomeTab.Alerts && (!alertsTab || frigate.url.isEmpty()) }
+                    }
+                    // Hiding Alerts while it is open leaves on Home, rather than on a tab nobody can see
+                    LaunchedEffect(shownTabs) {
+                        if (tab !in shownTabs) tab = shownTabs.firstOrNull() ?: HomeTab.Home
+                    }
+                    // Home Assistant cameras, when the pictures come from there: same shape, no address
+                    val cams = remember(cameraSource, haCameras, cameras) {
+                        if (cameraSource == CAMERAS_HOME_ASSISTANT) {
+                            haCameras.map { ha ->
+                                Camera(id = "ha:${ha.entityId}", name = ha.name, url = "", haEntity = ha.entityId)
+                            }
+                        } else {
+                            cameras
+                        }
+                    }
+                    // Left and right swap each session, as one of the shuffle options
+                    val panelFirst = remember(shuffleSeed, shuffleSides) {
+                        shuffleSides && Shuffle.order(listOf(0, 1), shuffleSeed, true, salt = 4).first() == 1
+                    }
+                    val sessionCams = remember(cams, shuffleSeed, shuffleCamera) {
+                        Shuffle.order(cams, shuffleSeed, shuffleCamera, salt = 1)
+                    }
+                    val camera = if (shuffleCamera) sessionCams.firstOrNull()?.takeIf { cams.size > 1 }
+                        ?: cams.find { it.id == selectedCamera }
+                        ?: cams.firstOrNull()
+                    else cams.find { it.id == selectedCamera } ?: cams.firstOrNull()
                     val mainCameraFocus = remember { FocusRequester() }
                     val haSensorsFocus = remember { FocusRequester() }
                     val networkFocus = remember { FocusRequester() }
@@ -152,6 +321,8 @@ class MainActivity : ComponentActivity() {
                     // tiles, anything below the top bar goes to the Assistant tab.
                     BackHandler {
                         when {
+                            // The settings page is a page: Back closes it before anything moves behind it
+                            settingsOpen -> settingsOpen = false
                             topBarSelected && !homeTabSelected -> runCatching { homeTabFocus.requestFocus() }
                             !bottomShown -> if (!topBarSelected) runCatching { assistantTabFocus.requestFocus() }
                             firstTileSelected -> runCatching { cogFocus.requestFocus() }
@@ -159,8 +330,18 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     // The top bar's, in their order on the Assistant tab, which has them all
-                    val actions = remember(haEntities, haTopBar) { haEntities.filter { it in haTopBar }.take(MAX_HA_ACTIONS) }
-                    val haConnection = rememberHaConnection(haServer, haEntities, haDisplay.dashboards)
+                    val actions = remember(haEntities, haTopBar, shuffleSeed, shuffleActions) {
+                        val chosen = haEntities.filter { it in haTopBar }.take(MAX_HA_ACTIONS)
+                        Shuffle.order(chosen, shuffleSeed, shuffleActions, salt = 2)
+                    }
+                    val haConnection = rememberHaConnection(
+                        haServer,
+                        haEntities,
+                        haDisplay.dashboards,
+                        calendarEntities = calendarConfig.entities,
+                        calendarDays = calendarConfig.days,
+                        calendarRefreshMinutes = prefs.calendarRefreshMinutes,
+                    )
                     val sideContent = haServer.isSet
                     // A dashboard in columns on the Home tab: the camera and the columns scroll sideways together
                     val homeStrip = sideContent && haDisplay.homeDashboard != null && haDisplay.homeColumns
@@ -173,17 +354,47 @@ class MainActivity : ComponentActivity() {
                     val continueFocus = remember { FocusRequester() }
                     var continueActive by remember { mutableStateOf(false) }
                     val frigateFeed = rememberFrigateFeed(frigate, onCertificateAccepted = { saveFrigate(frigate.copy(certPin = it)) })
+                    // The badge counts what arrived since the Alerts tab was last opened
+                    LaunchedEffect(badge, alertsDot, frigate, frigateFeed, tab) {
+                        // Either indicator shows that something arrived, so either needs the count
+                        if ((!badge && !alertsDot) || !frigate.isSet) {
+                            newEvents = 0
+                            return@LaunchedEffect
+                        }
+                        if (tab == HomeTab.Alerts) {
+                            // Looked at: what is there now is seen
+                            prefs.badgeSeenAt = (System.currentTimeMillis() / 1000).toDouble()
+                            newEvents = 0
+                            return@LaunchedEffect
+                        }
+                        // First run: everything already there is old news, so start counting from now
+                        if (prefs.badgeSeenAt == 0.0) prefs.badgeSeenAt = (System.currentTimeMillis() / 1000).toDouble()
+                        while (true) {
+                            val seen = prefs.badgeSeenAt
+                            val client = frigateFeed?.client ?: break
+                            val result = runCatching { client.alerts() }
+                            result.onSuccess { alerts ->
+                                newEvents = alerts.count { it.startTime > seen }
+                                AppLog.i("Badge", "seen=$seen of ${alerts.size} alerts, ${newEvents} new")
+                            }.onFailure {
+                                AppLog.w("Badge", "Can't count the alerts", it)
+                            }
+                            delay(60_000L)
+                        }
+                    }
                     val alertsRowFocus = remember { FocusRequester() }
                     // From reaching the row until the remote is back on the tiles, wherever it goes meanwhile
                     var alertsRowShown by remember { mutableStateOf(false) }
                     // Not on the Alerts tab, nor on the Assistant tab unless chosen in the Home Assistant dialog
-                    val alertsRowFeed = frigateFeed?.takeIf { tab != HomeTab.Alerts && bottomRow }
+                    // On the Home tab only when asked for: the events belong to Cameras and Alerts there
+                    val alertsRowAllowed = tab == HomeTab.Cameras || homeAlertsRow
+                    val alertsRowFeed = frigateFeed?.takeIf { tab != HomeTab.Alerts && bottomRow && alertsRowAllowed }
                     val hasAlertsRow = alertsRowFeed != null && alertsRowFeed.rowAlerts.isNotEmpty()
                     LaunchedEffect(hasAlertsRow) { if (!hasAlertsRow) alertsRowShown = false }
                     var tilesRowSelected by remember { mutableStateOf(false) }
                     var otherTileSelected by remember { mutableStateOf(false) }
                     var noAlertsSelected by remember { mutableStateOf(false) }
-                    val showNoAlertsTile = frigateFeed?.noRecentAlerts == true && bottomRow
+                    val showNoAlertsTile = frigateFeed?.noRecentAlerts == true && bottomRow && alertsRowAllowed
                     // Worked out before the tile is removed, when focus is still known to be on it
                     val lostNoAlertsTile = remember(showNoAlertsTile) { !showNoAlertsTile && noAlertsSelected }
                     val alertsExist = frigateFeed != null && frigateFeed.rowAlerts.isNotEmpty()
@@ -237,7 +448,7 @@ class MainActivity : ComponentActivity() {
                             if (event.type == KeyEventType.KeyDown) runCatching { cogFocus.requestFocus() }
                             return true
                         }
-                        colorButtonTab(event)?.let { pressed ->
+                        colorButtonTab(event, shownTabs)?.let { pressed ->
                             if (event.type == KeyEventType.KeyDown) {
                                 tab = pressed
                                 val tabFocus = when (pressed) {
@@ -251,20 +462,21 @@ class MainActivity : ComponentActivity() {
                             return true
                         }
                         // Channel up and down: the next or previous camera, on the Home tab wherever the
-                        // selection is, and on the Cameras tab the selection moves to it
-                        channelStep(event)?.let { step ->
+                        // selection is, and on the Cameras tab the selection moves to it. Off, those keys
+                        // are left to the TV
+                        if (channelKeys) channelStep(event)?.let { step ->
                             if (tab != HomeTab.Home && tab != HomeTab.Cameras) return false
                             if (event.type == KeyEventType.KeyDown) {
                                 if (tab == HomeTab.Cameras) {
-                                    steppedCamera(cameras, gridFocusedCamera, step)?.let { gridCameraDue = it.id }
+                                    steppedCamera(cams, gridFocusedCamera, step)?.let { gridCameraDue = it.id }
                                 } else {
-                                    steppedCamera(cameras, camera?.id, step)?.let(::selectCamera)
+                                    steppedCamera(cams, camera?.id, step)?.let(::selectCamera)
                                 }
                             }
                             return true
                         }
                         val index = cameraButtonIndex(event) ?: return false
-                        val picked = cameras.getOrNull(index)
+                        val picked = cams.getOrNull(index)
                         if (event.type == KeyEventType.KeyDown && picked != null) {
                             if (tab == HomeTab.Cameras) {
                                 gridCameraDue = picked.id
@@ -282,12 +494,20 @@ class MainActivity : ComponentActivity() {
                         HomeTopBar(
                             tab = tab,
                             onTabChange = { tab = it },
+                            tabs = shownTabs,
                             secondTabFocus = secondTabFocus,
                             homeTabFocus = homeTabFocus,
                             alertsTabFocus = alertsTabFocus,
                             assistantTabFocus = assistantTabFocus,
                             onHomeTabSelected = { homeTabSelected = it },
                             showFreeMemory = showFreeMemory,
+                            newEvents = if (badge && frigate.isSet && alertsTab) newEvents else 0,
+                            alertsDot = alertsDot && frigate.isSet && alertsTab && newEvents > 0,
+                            onNewEvents = {
+                                // The count is cleared the moment the tab opens, so the focus goes with it
+                                tab = HomeTab.Alerts
+                                runCatching { alertsTabFocus.requestFocus() }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(start = EdgePadding, top = TopPadding, end = EdgePadding)
@@ -317,13 +537,15 @@ class MainActivity : ComponentActivity() {
                         }
                         if (tab == HomeTab.Cameras) {
                             CameraGrid(
-                                cameras = cameras,
+                                cameras = cams,
+                                ha = haServer,
                                 // Like the main camera: a clip opened from the alerts row may need its decoder,
                                 // and so may a camera shown full screen
                                 playSubstreams = cameraGridLive &&
                                     !(minimizeVideoStreams && (frigateFeed?.playing != null || fullScreenCamera != null)),
                                 minimizeStreams = minimizeVideoStreams,
                                 spareDecoder = fullScreenCamera != null,
+                                soundEnabled = cameraSound == CAMERA_SOUND_FULLSCREEN,
                                 onSelect = { fullScreenCamera = it },
                                 onSetUp = { camerasOpen = true },
                                 selectCamera = gridCameraDue,
@@ -344,7 +566,7 @@ class MainActivity : ComponentActivity() {
                                 entityIds = haEntities,
                                 dashboard = haDisplay.dashboard,
                                 tabFocus = assistantTabFocus,
-                                onSetUp = { haDialogOpen = true },
+                                onSetUp = { haDialogTab = HaDialogTab.Home },
                                 sectionColumns = haDisplay.sectionColumns,
                                 toScreenEdge = !bottomShown,
                                 modifier = Modifier.weight(1f).fillMaxWidth().padding(top = EdgePadding).onFocusChanged { middleSelected = it.hasFocus },
@@ -360,12 +582,24 @@ class MainActivity : ComponentActivity() {
                                         key(sideContent) {
                                             MainCamera(
                                                 camera = camera,
-                                                cameras = cameras,
+                                                cameras = cams,
+                                                ha = haServer,
                                                 minimizeStreams = minimizeVideoStreams,
+                                                soundEnabled = cameraSound == CAMERA_SOUND_FULLSCREEN,
+                                                // Learned once per camera, then remembered for the next time
+                                                onAspect = { reported ->
+                                                    val known = cameras.find { it.id == camera.id }?.aspect ?: 0f
+                                                    if (kotlin.math.abs(reported - known) > 0.01f) {
+                                                        saveCameras(
+                                                            cameras.map {
+                                                                if (it.id == camera.id) it.copy(aspect = reported) else it
+                                                            },
+                                                        )
+                                                    }
+                                                },
                                                 onSelect = ::selectCamera,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .aspectRatio(16f / 9f)
                                                     .focusRequester(mainCameraFocus)
                                                     .focusProperties { up = secondTabFocus },
                                             )
@@ -373,7 +607,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                            val homeEntities = remember(haEntities) { haEntities.filterNot(::isHaAction) }
+                            // Its own choice: the living room beside the camera, the house on the Assistant tab
+                            val homeEntities = remember(haHomeEntities) { haHomeEntities.filterNot(::isHaAction) }
                             if (homeStrip) {
                                 // A dashboard in columns: the camera and the columns in one row that
                                 // scrolls sideways to the screen's right edge, the camera leaving on
@@ -394,7 +629,7 @@ class MainActivity : ComponentActivity() {
                                         dashboard = haDisplay.homeDashboard,
                                         // The button next to the cog
                                         tabFocus = networkFocus,
-                                        onSetUp = { haDialogOpen = true },
+                                        onSetUp = { haDialogTab = HaDialogTab.Home },
                                         sectionColumns = true,
                                         leading = LeadingItem(cameraWidth, cameraWidth * 9f / 16f) { CameraBox(cameraWidth) },
                                         columnsFocus = haSensorsFocus,
@@ -411,12 +646,32 @@ class MainActivity : ComponentActivity() {
                                         .padding(start = EdgePadding, top = EdgePadding, end = EdgePadding)
                                         .onFocusChanged { middleSelected = it.hasFocus },
                                 ) {
-                                    val cameraWidth = minOf(
-                                        maxHeight * 16f / 9f,
-                                        if (sideContent) maxWidth - SidePanelWidth - EdgePadding else maxWidth,
-                                    )
+                                    // The slot is the camera's own shape, so a 4:3 picture leaves a gap by
+                                    // design; what happens to that gap is a setting
+                                    val cameraShape = camera?.aspect?.takeIf { it > 0f } ?: (16f / 9f)
+                                    val roomForCamera = if (sideContent) maxWidth - SidePanelWidth - EdgePadding else maxWidth
+                                    val cameraWidth = minOf(maxHeight * cameraShape, roomForCamera)
+                                    // What the choice does, in one place: "wider widgets" gives the panel
+                                    // the rest of the width; the other two keep it at its own width and
+                                    // leave the space beside a narrow picture empty, or centre it there.
+                                    // Before this, the panel always took the rest, so "wider" and "leave
+                                    // the gap" were the same picture and the choice did nothing.
+                                    val gapKept = cameraSide != CAMERA_SIDE_WIDER
                                     Row(horizontalArrangement = Arrangement.spacedBy(EdgePadding)) {
-                                        CameraBox(cameraWidth)
+                                        // A camera and widgets can trade places each session
+                                        val cameraSlot: @Composable () -> Unit = {
+                                            when (cameraSide) {
+                                                CAMERA_SIDE_CENTRE -> Box(
+                                                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                                                    contentAlignment = Alignment.Center,
+                                                ) { CameraBox(cameraWidth) }
+                                                else -> CameraBox(cameraWidth)
+                                            }
+                                        }
+                                        if (!panelFirst) cameraSlot()
+                                        // "Leave the gap": the space between the picture and a fixed-width
+                                        // panel. Centring already holds that space in its own weighted box
+                                        if (sideContent && cameraSide == CAMERA_SIDE_LEFT) Spacer(Modifier.weight(1f))
                                         if (sideContent && haDisplay.homeDashboard != null) {
                                             // A dashboard chosen for the Home tab: its sections, card by card
                                             HaAssistantTab(
@@ -426,19 +681,30 @@ class MainActivity : ComponentActivity() {
                                                 dashboard = haDisplay.homeDashboard,
                                                 // The button next to the cog
                                                 tabFocus = networkFocus,
-                                                onSetUp = { haDialogOpen = true },
+                                                onSetUp = { haDialogTab = HaDialogTab.Home },
                                                 inset = 0.dp,
-                                                modifier = Modifier.weight(1f).fillMaxHeight().focusRequester(haSensorsFocus),
+                                                modifier = Modifier
+                                                    .then(if (gapKept) Modifier.width(SidePanelWidth) else Modifier.weight(1f))
+                                                    .fillMaxHeight()
+                                                    .focusRequester(haSensorsFocus),
                                             )
                                         } else if (sideContent) {
-                                            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .then(if (gapKept) Modifier.width(SidePanelWidth) else Modifier.weight(1f))
+                                                    .fillMaxHeight(),
+                                            ) {
                                                 HomeAssistantPanel(
                                                     connection = haConnection,
                                                     entityIds = homeEntities,
+                                                    calendar = calendarConfig,
+                                                    showSensors = homeSensors,
+                                                    cardSeed = shuffleSeed,
+                                                    shuffleCards = shuffleCards,
                                                     sensorsFocus = haSensorsFocus,
                                                     // The button next to the cog
                                                     upFocus = networkFocus,
-                                                    onLogIn = { haDialogOpen = true },
+                                                    onLogIn = { haDialogTab = HaDialogTab.Home },
                                                     onOpen = {
                                                         tab = HomeTab.Assistant
                                                         runCatching { assistantTabFocus.requestFocus() }
@@ -447,6 +713,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                         }
+                                        if (panelFirst) cameraSlot()
                                     }
                                 }
                             }
@@ -486,8 +753,37 @@ class MainActivity : ComponentActivity() {
                                         if (visible != null && hiddenApps != null) AppRow(
                                             apps = visible,
                                             hiddenApps = hiddenApps,
+                                            favourites = favourites,
+                                            allAppsTile = allAppsTile,
+                                            wrapRow = appRowWrap,
+                                            restoreKey = if (allAppsOpen) null else allAppsReturnKey,
+                                            onRestored = { allAppsReturnKey = null },
+                                            onOpenAllApps = {
+                                                allAppsReturnKey = ALL_APPS_TILE_KEY
+                                                allAppsOpen = true
+                                            },
+                                            onPin = { app ->
+                                                favourites = favourites + app.key
+                                                prefs.favouriteApps = favourites
+                                            },
+                                            onUnpin = { app ->
+                                                favourites = favourites - app.key
+                                                prefs.favouriteApps = favourites
+                                            },
                                             showHidden = showHidden,
                                             onShowHiddenChange = { showHidden = it },
+                                            onSetIcon = { app ->
+                                                iconFor = app
+                                                iconPick.launch(arrayOf("image/*"))
+                                            },
+                                            onResetIcon = { app ->
+                                                val entries = prefs.appIcons.filterNot { it.substringBefore('=') == app.key }
+                                                prefs.appIcons = entries
+                                                appIconOverrides = entries.associate { it.substringBefore('=') to it.substringAfter('=') }
+                                                // The decoded copy is cached: drop it so the app's own art returns
+                                                tileImageCacheInvalidate(app.key)
+                                                iconVersion++
+                                            },
                                             onHide = { app ->
                                                 // Hidden apps leave the row order and queue up at the end
                                                 saveOrder(visible.map { it.key } - app.key)
@@ -498,14 +794,22 @@ class MainActivity : ComponentActivity() {
                                                 saveOrder(visible.map { it.key } + app.key)
                                                 saveHidden(hidden - app.key)
                                             },
-                                            onReorder = { list -> saveOrder(list.map { it.key }) },
+                                            onReorder = { list ->
+                                                if (favourites.isEmpty()) {
+                                                    saveOrder(list.map { it.key })
+                                                } else {
+                                                    // The row shows the favourites: arrange those
+                                                    favourites = list.map { it.key }.filter { key -> key in favourites }
+                                                    prefs.favouriteApps = favourites
+                                                }
+                                            },
                                             upFocus = { slot ->
                                                 when {
                                                     hasAlertsRow -> alertsRowFocus
                                                     else -> aboveRows(slot)
                                                 }
                                             },
-                                            downFocus = if (continueItems.isNotEmpty()) continueFocus else FocusRequester.Cancel,
+                                            downFocus = if (continueWatching && continueItems.isNotEmpty()) continueFocus else FocusRequester.Cancel,
                                             rowFocus = appRowFocus,
                                             goToFirstTile = goToFirstTile,
                                             onFirstTileSelected = { firstTileSelected = it },
@@ -521,6 +825,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 second = {
+                                    // Off, the row is simply not there
+                                    if (!continueWatching) return@SlidingRows
                                     ContinueWatchingRow(
                                         items = continueItems,
                                         apps = all.orEmpty(),
@@ -543,14 +849,16 @@ class MainActivity : ComponentActivity() {
                         FullScreenCamera(
                             it,
                             minimizeVideoStreams,
-                            onCameraButton = { index -> cameras.getOrNull(index)?.let { picked -> fullScreenCamera = picked } },
-                            onChannel = { step -> steppedCamera(cameras, it.id, step)?.let { picked -> fullScreenCamera = picked } },
+                            ha = haServer,
+                            soundEnabled = cameraSound == CAMERA_SOUND_FULLSCREEN,
+                            onCameraButton = { index -> cams.getOrNull(index)?.let { picked -> fullScreenCamera = picked } },
+                            onChannel = { step -> steppedCamera(cams, it.id, step)?.let { picked -> fullScreenCamera = picked } },
                             onClose = { fullScreenCamera = null },
                         )
                     }
                     if (camerasOpen) {
                         CamerasDialog(
-                            cameras = cameras,
+                            cameras = cams,
                             onChange = ::saveCameras,
                             playSubstreams = cameraGridLive,
                             onPlaySubstreamsChange = {
@@ -565,15 +873,20 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { camerasOpen = false },
                         )
                     }
-                    if (haDialogOpen) {
+                    if (haDialogTab != null) {
                         HomeAssistantDialog(
                             initialServer = haServer,
                             initialUsername = remember { prefs.haUsername },
                             initialEntities = haEntities,
+                            initialHomeEntities = haHomeEntities,
                             initialTopBar = haTopBar,
                             initialDisplay = haDisplay,
                             loginRejected = haConnection.status == HaStatus.TokenRejected,
-                            onSave = { server, username, entities, topBar, display ->
+                            // A row in the settings page says which part it is about
+                            initialTab = haDialogTab ?: HaDialogTab.Home,
+                            // The Home Assistant row is the connection, so it opens there
+                            connectionFirst = haConnectFirst,
+                            onSave = { server, username, entities, homeEntities, topBar, display ->
                                 // A replaced username-and-password login is ended in Home Assistant
                                 if (haServer.refreshToken != server.refreshToken) revokeHaLogin(haServer)
                                 haServer = server
@@ -581,14 +894,53 @@ class MainActivity : ComponentActivity() {
                                 prefs.haToken = server.token
                                 prefs.haRefreshToken = server.refreshToken
                                 prefs.haUsername = username
-                                saveHaChoice(entities, topBar)
+                                saveHaChoice(entities, homeEntities, topBar)
                                 haDisplay = display
                                 prefs.haDisplay = display
+                                // The page behind the dialog shows these choices on its rows
+                                settingsRevision++
                             },
                             onLogOut = ::logOutOfHa,
                             onDiscardLogin = ::revokeHaLogin,
-                            onDismiss = { haDialogOpen = false },
+                            onDismiss = { haDialogTab = null; haConnectFirst = false },
                         )
+                    }
+                    if (logoutConfirm) {
+                        ConfirmDialog(
+                            title = "Log out of Home Assistant?",
+                            detail = "The TV's login is ended in Home Assistant's own profile. You can log in again here at any time.",
+                            confirm = "Log out",
+                            onConfirm = { logOutOfHa() },
+                            onDismiss = { logoutConfirm = false },
+                        )
+                    }
+                    if (homeHelperOpen) {
+                        HomeHelperDialog(
+                            prefs = prefs,
+                            onOpenAccessibility = { openAccessibilitySettings() },
+                            onTurnOff = {
+                                prefs.catchHomeKey = false
+                                prefs.reopenAfterHome = false
+                            },
+                            onDismiss = { homeHelperOpen = false },
+                        )
+                    }
+                    if (haAddressOpen) {
+                        HaAddressDialog(prefs = prefs, onDismiss = { haAddressOpen = false })
+                    }
+                    if (entityNamesOpen) {
+                        EntityNamesDialog(
+                            prefs = prefs,
+                            entities = (haEntities + haHomeEntities).distinct(),
+                            haNameOf = { haConnection.entities[it]?.fullName },
+                            onDismiss = { entityNamesOpen = false },
+                        )
+                    }
+                    if (screensaverOpen) {
+                        ScreensaverDialog(prefs = prefs, cameras = cams, onDismiss = { screensaverOpen = false })
+                    }
+                    if (notificationsOpen) {
+                        NotificationsDialog(onDismiss = { notificationsOpen = false })
                     }
                     if (frigateOpen) {
                         FrigateDialog(
@@ -597,22 +949,142 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { frigateOpen = false },
                         )
                     }
+                    if (haCamerasOpen) {
+                        HaCamerasDialog(
+                            server = haServer,
+                            chosen = haCameras,
+                            onChange = { picked ->
+                                haCameras = picked
+                                prefs.haCameraEntities = haCamerasToPrefs(picked)
+                            },
+                            onDismiss = { haCamerasOpen = false },
+                        )
+                    }
+                    if (calendarsOpen) {
+                        CalendarPickerDialog(
+                            server = haServer,
+                            chosen = calendarConfig.entities,
+                            onChange = { chosen ->
+                                // Saved at once: the card and the connection both read it back
+                                prefs.calendarEntities = chosen
+                                calendarConfig = prefs.calendarConfig()
+                            },
+                            onDismiss = { calendarsOpen = false },
+                        )
+                    }
+                    if (calendarColoursOpen) {
+                        CalendarColoursDialog(
+                            server = haServer,
+                            chosen = calendarConfig.entities,
+                            colours = calendarConfig.colours,
+                            onChange = { picked ->
+                                prefs.calendarColours = picked
+                                calendarConfig = prefs.calendarConfig()
+                            },
+                            onDismiss = { calendarColoursOpen = false },
+                        )
+                    }
+                    if (favouritesOpen) {
+                        FavouritesEditorDialog(
+                            apps = all.orEmpty(),
+                            favourites = favourites,
+                            onChange = {
+                                favourites = it
+                                prefs.favouriteApps = it
+                            },
+                            onDismiss = { favouritesOpen = false },
+                        )
+                    }
+                    if (allAppsOpen) {
+                        AllAppsPage(
+                            apps = all.orEmpty(),
+                            hidden = hidden.toSet(),
+                            onSetIcon = { app ->
+                                iconFor = app
+                                iconPick.launch(arrayOf("image/*"))
+                            },
+                            onResetIcon = { app ->
+                                val entries = prefs.appIcons.filterNot { it.substringBefore('=') == app.key }
+                                prefs.appIcons = entries
+                                appIconOverrides = entries.associate { it.substringBefore('=') to it.substringAfter('=') }
+                                tileImageCacheInvalidate(app.key)
+                                iconVersion++
+                            },
+                            favourites = favourites,
+                            onPin = { app ->
+                                favourites = favourites + app.key
+                                prefs.favouriteApps = favourites
+                            },
+                            onUnpin = { app ->
+                                favourites = favourites - app.key
+                                prefs.favouriteApps = favourites
+                            },
+                            showHidden = showHidden,
+                            onShowHiddenChange = { showHidden = it },
+                            onHide = { app ->
+                                saveOrder(visible.orEmpty().map { it.key } - app.key)
+                                saveHidden(hidden + app.key)
+                            },
+                            onUnhide = { app ->
+                                saveOrder(visible.orEmpty().map { it.key } + app.key)
+                                saveHidden(hidden - app.key)
+                            },
+                            lines = allAppsLines,
+                            vertical = allAppsVertical,
+                            onClose = { allAppsOpen = false },
+                        )
+                    }
+                    if (backgroundColourOpen) {
+                        BackgroundColourDialog(
+                            current = prefs.backgroundColour,
+                            onPick = {
+                                prefs.backgroundColour = it
+                                prefs.backgroundKind = BACKGROUND_COLOUR
+                                backgroundVersion++
+                            },
+                            onDismiss = { backgroundColourOpen = false },
+                        )
+                    }
                     if (settingsOpen) {
-                        SettingsMenuDialog(
+                        SettingsPage(
+                            prefs = prefs,
                             actions = SettingsActions(
+                                openFavourites = { favouritesOpen = true },
+                                openCalendars = { calendarsOpen = true },
+                                openBackgroundColour = { backgroundColourOpen = true },
+                                pickBackgroundImage = { backgroundPick.launch(arrayOf("image/*")) },
+                                openCalendarColours = { calendarColoursOpen = true },
+                                openHaCameras = { haCamerasOpen = true },
                                 openCameras = { camerasOpen = true },
-                                openHomeAssistant = { haDialogOpen = true },
-                                openFrigate = { frigateOpen = true },
-                                openPing = { pingOpen = true },
-                                openAccessibilitySettings = {
-                                    openAccessibilitySettings()
+                                openScreensaver = { screensaverOpen = true },
+                                openEntityNames = { entityNamesOpen = true },
+                                openHaAddress = { haAddressOpen = true },
+                                logOutHomeAssistant = { logoutConfirm = true },
+                                // The connection step, not a part of the editor
+                                openHaLogin = {
+                                    haDialogTab = HaDialogTab.Home
+                                    haConnectFirst = true
                                 },
+                                openHomeHelper = { homeHelperOpen = true },
+                                openHomeAssistant = { tab -> haDialogTab = tab ?: HaDialogTab.Home },
+                                openFrigate = { frigateOpen = true },
+                                openNotificationAccess = { notificationsOpen = true },
+                                markAlertsReviewed = {
+                                    // Everything there now is looked at, so neither the dot nor the
+                                    // count has anything to say
+                                    prefs.badgeSeenAt = (System.currentTimeMillis() / 1000).toDouble()
+                                    newEvents = 0
+                                    settingsRevision++
+                                },
+                                openPing = { pingOpen = true },
                                 openSystemSettings = { openSystemSettings() },
                                 exportSettings = { exportOpen = true },
                                 importSettings = { importOpen = true },
                                 restartApp = { restartApp() },
                             ),
+                            revision = settingsRevision,
                             onSettingsChanged = {
+                                settingsRevision++
                                 // The launcher keeps its own copies of the few settings it renders
                                 catchHomeKey = prefs.catchHomeKey
                                 reopenAfterHome = prefs.reopenAfterHome
@@ -620,9 +1092,32 @@ class MainActivity : ComponentActivity() {
                                 showFreeMemory = prefs.showFreeMemory
                                 cameraGridLive = prefs.cameraGridLive
                                 minimizeVideoStreams = prefs.minimizeVideoStreams
+                                homeAlertsRow = prefs.homeAlertsRow
+                                continueWatching = prefs.continueWatching
+                                appRowWrap = prefs.appRowWrap
+                                allAppsTile = prefs.allAppsTile
+                                allAppsLines = prefs.allAppsLines
+                                allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
+                                favourites = prefs.favouriteApps
+                                hidePhoneApps = prefs.hidePhoneApps
+                                homeSensors = prefs.homeSensors
+                                cameraSource = prefs.cameraSource
+                                cameraSide = prefs.cameraSide
+                                // Where Home starts is a selection, not a value the row can leave alone
+                                applyHomeCameraStart()
+                                channelKeys = prefs.channelKeys
+                                cameraSound = prefs.cameraSound
+                                calendarConfig = prefs.calendarConfig()
+                                // The Assistant and Frigate rows the page now holds
+                                EntityNames.load(prefs)
+                                haDisplay = prefs.haDisplay
+                                alertsTab = prefs.alertsTab
+                                badge = prefs.badge
+                                alertsDot = prefs.alertsDot
                                 homeOverrideChanged()
                             },
                             onDismiss = { settingsOpen = false },
+                            onOpenAccessibility = { openAccessibilitySettings() },
                         )
                     }
                     if (stuckPlayersOpen) {
@@ -631,7 +1126,7 @@ class MainActivity : ComponentActivity() {
                     if (exportOpen) {
                         ExportDialog(
                             file = SettingsFile(
-                                cameras = cameras,
+                                cameras = cams,
                                 login = haServer.takeIf { it.isSet },
                                 username = remember { prefs.haUsername },
                                 sensors = haEntities.filterNot(::isHaAction).map { NamedEntity(it, haConnection.entities[it]?.name ?: it) },
@@ -697,6 +1192,26 @@ class MainActivity : ComponentActivity() {
             showFreeMemory = prefs.showFreeMemory
             cameraGridLive = prefs.cameraGridLive
             minimizeVideoStreams = prefs.minimizeVideoStreams
+            homeAlertsRow = prefs.homeAlertsRow
+            continueWatching = prefs.continueWatching
+            appRowWrap = prefs.appRowWrap
+            allAppsTile = prefs.allAppsTile
+            allAppsLines = prefs.allAppsLines
+            allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
+            favourites = prefs.favouriteApps
+            hidePhoneApps = prefs.hidePhoneApps
+            homeSensors = prefs.homeSensors
+            channelKeys = prefs.channelKeys
+            cameraSource = prefs.cameraSource
+            cameraSide = prefs.cameraSide
+            applyHomeCameraStart()
+            haCameras = haCamerasFromPrefs(prefs.haCameraEntities)
+            cameraSound = prefs.cameraSound
+            calendarConfig = prefs.calendarConfig()
+            haDisplay = prefs.haDisplay
+            alertsTab = prefs.alertsTab
+            badge = prefs.badge
+            alertsDot = prefs.alertsDot
             homeOverrideChanged()
         }
         // The same camera, by its exact addresses, only takes the imported name. Each camera here
@@ -735,7 +1250,11 @@ class MainActivity : ComponentActivity() {
         val fileActions = file.actions.map { it.id }
         val imported = file.order ?: (file.sensors.map { it.id } + fileActions)
         val entities = (haEntities + imported).distinct()
-        saveHaChoice(entities, (haTopBar + (file.topBar ?: fileActions.take(MAX_HA_ACTIONS))).distinct().filter { it in entities }.take(MAX_HA_ACTIONS))
+        saveHaChoice(
+            entities,
+            haHomeEntities.filter { it in entities },
+            (haTopBar + (file.topBar ?: fileActions.take(MAX_HA_ACTIONS))).distinct().filter { it in entities }.take(MAX_HA_ACTIONS),
+        )
         file.frigate?.let(::saveFrigate)
         // The row becomes the apps in the file that are on this TV; the others can be unhidden later
         val apps = installed.orEmpty().map { it.key }
@@ -747,15 +1266,35 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Settings imported", Toast.LENGTH_SHORT).show()
     }
 
-    private fun saveHaChoice(entities: List<String>, topBar: List<String>) {
+    private fun saveHaChoice(entities: List<String>, homeEntities: List<String>, topBar: List<String>) {
         haEntities = entities
         haTopBar = topBar
-        prefs.saveHaChoice(entities, topBar)
+        prefs.saveHaChoice(entities, homeEntities, topBar)
+        haHomeEntities = prefs.haHomeEntities
     }
 
     private fun saveFrigate(value: FrigateServer) {
         frigate = value
         prefs.frigate = value
+    }
+
+    /**
+     * Where the Home tab's camera starts: "First in the list" is the camera dialog's order, whatever
+     * the remote last switched to, and "Last switched to" is that saved choice. Run at start, and
+     * again when the row is changed: re-reading the pref alone changes nothing on screen.
+     */
+    private fun applyHomeCameraStart() {
+        homeCameraStart = prefs.homeCameraStart
+        if (homeCameraStart != HOME_CAMERA_FIRST) {
+            selectedCamera = prefs.selectedCamera
+            return
+        }
+        val first = if (cameraSource == CAMERAS_HOME_ASSISTANT) {
+            haCameras.firstOrNull()?.let { "ha:${it.entityId}" }
+        } else {
+            prefs.cameras.firstOrNull()?.id
+        }
+        if (first != null) selectedCamera = first
     }
 
     private fun selectCamera(camera: Camera) {
