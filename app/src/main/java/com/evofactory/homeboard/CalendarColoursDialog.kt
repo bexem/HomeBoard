@@ -17,11 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
@@ -58,11 +53,6 @@ fun CalendarColoursDialog(
     val rows = remember { ListFocus() }
     val done = remember { FocusRequester() }
 
-    fun step(id: String, delta: Int) {
-        picked = cycleCalendarColour(picked, id, delta)
-        onChange(picked)
-    }
-
     fun choose(id: String, hex: String) {
         picked = picked.filterNot { it.substringBefore('=') == id } + "$id=$hex"
         onChange(picked)
@@ -77,7 +67,7 @@ fun CalendarColoursDialog(
         subtitle = if (chosen.isEmpty()) {
             "No calendars chosen yet: pick some under Calendars first."
         } else {
-            "Left and right change a calendar's colour. Home Assistant keeps no colour for a calendar, so this is the launcher's."
+            "OK chooses a calendar's colour. Home Assistant keeps no colour for a calendar, so this is the launcher's."
         },
         buttons = listOf(DialogButton("Done", primary = true, focus = done, onClick = onDismiss)),
         contentFocus = { rows.currentOrNull(chosen) ?: done },
@@ -100,30 +90,24 @@ fun CalendarColoursDialog(
                                 .background(colourOf(hex), CircleShape),
                         )
                     },
-                    modifier = rows.row(id).onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) {
-                            false
-                        } else {
-                            when (event.key) {
-                                Key.DirectionLeft -> { step(id, -1); true }
-                                Key.DirectionRight -> { step(id, 1); true }
-                                else -> false
-                            }
-                        }
-                    },
+                    // A door: the colour itself is chosen in the launcher's one colour picker
+                    modifier = rows.row(id),
                 )
             }
         }
         LaunchedEffect(chosen) { runCatching { (rows.currentOrNull(chosen) ?: done).requestFocus() } }
         menuFor?.let { id ->
-            val current = calendarColour(picked, id)
-            ContextMenu(
+            // The same picker the background uses (C3): dot, name, "In use", Done
+            val hex = calendarColour(picked, id) ?: CalendarPalette.getOrNull(chosen.indexOf(id))?.hex()
+            val current = CalendarPalette.firstOrNull { it.hex().equals(hex, true) } ?: CalendarPalette.first()
+            ColourPickerDialog(
                 title = names[id] ?: id,
-                actions = CalendarPalette.map { entry ->
-                    MenuAction(if (entry.hex().equals(current, true)) "${entry.name} ✓" else entry.name) {
-                        choose(id, entry.hex())
-                        menuFor = null
-                    }
+                subtitle = "The bar beside this calendar's events; Home Assistant keeps no colour for a calendar, so this is the launcher's",
+                palette = CalendarPalette,
+                current = current.argb,
+                onPick = { argb ->
+                    choose(id, ColourEntry("", argb).hex())
+                    menuFor = null
                 },
                 onDismiss = { menuFor = null },
             )

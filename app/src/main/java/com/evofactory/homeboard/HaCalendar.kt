@@ -135,16 +135,6 @@ val CalendarPalette = listOf(
 fun calendarColour(choices: List<String>, id: String): String? =
     choices.firstOrNull { it.startsWith("$id=") }?.substringAfter("=", "")?.takeIf { it.isNotEmpty() }
 
-/** [choices] with [id] moved [delta] steps through the palette, from its current colour */
-fun cycleCalendarColour(choices: List<String>, id: String, delta: Int): List<String> {
-    val current = calendarColour(choices, id)
-    val start = CalendarPalette.indexOfFirst { it.hex().equals(current, ignoreCase = true) }
-    // No colour yet: the first press starts from the palette's first
-    val from = if (start >= 0) start else 0
-    val next = (from + delta).mod(CalendarPalette.size)
-    return choices.filterNot { it.startsWith("$id=") } + "$id=${CalendarPalette[next].hex()}"
-}
-
 /** "#RRGGBB" from the palette, or the palette's first colour when nothing is chosen */
 fun colourOf(hex: String?): Color {
     val text = hex?.removePrefix("#") ?: return Color(0xFF7CB342)

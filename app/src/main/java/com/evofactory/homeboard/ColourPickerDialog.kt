@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -42,6 +44,7 @@ fun ColourPickerDialog(
 ) {
     val rows = remember { ListFocus() }
     val done = remember { FocusRequester() }
+    val list = rememberLazyListState()
     val keys = remember(palette) { palette.map { it.name } }
     TopDialog(
         title = title,
@@ -50,7 +53,7 @@ fun ColourPickerDialog(
         buttons = listOf(DialogButton("Done", primary = true, focus = done, onClick = onDismiss)),
         contentFocus = { rows.currentOrNull(keys) ?: done },
     ) {
-        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+        LazyColumn(state = list, modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
             items(palette, key = { it.name }) { entry ->
                 ListItem(
                     selected = false,
@@ -75,6 +78,14 @@ fun ColourPickerDialog(
                 )
             }
         }
-        LaunchedEffect(Unit) { runCatching { (rows.currentOrNull(keys) ?: done).requestFocus() } }
+        // The selection starts on the colour in use, so "In use" is on screen where it matters; the list
+        // has to reach that row before it exists to take the focus
+        LaunchedEffect(Unit) {
+            val index = palette.indexOfFirst { it.argb == current }
+            if (index > 0) list.scrollToItem(index)
+            withFrameNanos { }
+            val inUse = palette.getOrNull(index)?.name
+            runCatching { (inUse?.let(rows::requester) ?: rows.currentOrNull(keys) ?: done).requestFocus() }
+        }
     }
 }

@@ -1444,3 +1444,34 @@ own reading was drawn.
   Fri cloudy — and "Next hours" 15:00–22:00 with temperatures and the 20 % hour (screenshot).
 - Close returned to the card. The card's own arrow edges (Up to the tab, Down to the next card) are
   unchanged: it is still one card.
+
+## The calendar colours open the launcher's one colour picker (2026-11-13)
+
+Ema: "The colour selection is still wrong and using two separate popups rather than reusing code." C3 had
+built `ColourPickerDialog` and moved the background onto it, but the calendar kept a second editor: its own
+per-row layout, its own palette `ContextMenu` and its own left/right cycling.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `CalendarColoursDialog.kt` | Each calendar's row is a **door**: OK opens the same `ColourPickerDialog` the background uses (dot, name, "In use", Done). The local cycling and the local palette menu are gone; `choose()` still writes the same `id=#RRGGBB` line |
+| `HaCalendar.kt` | `cycleCalendarColour` deleted with them (nothing else called it) — `colourOf`, `calendarColour` and `CalendarPalette` stay |
+| `ColourPickerDialog.kt` | Opens **on the colour in use**, scrolling the list to it first (a lazy row that is not composed cannot take the focus), so "In use" is where the remote is instead of off-screen |
+
+### Deliberate designs worth keeping
+
+- **One palette renderer, two palettes.** The background's 12 and the calendar's 8 are data; the dialog is
+  the only place a colour list is drawn. A second editor cannot drift from the first because there is no
+  second editor.
+- **A door says what OK does.** The calendar row reads "OK chooses a calendar's colour…" and the row's own
+  left/right stepping is gone: no key does anything invisible (M12's "pickers say what OK does", applied to
+  the last dialog that still had a hidden key).
+
+### Verified on the Shield (2026-11-13, 15:15–15:22)
+
+- Calendar → **Event colours · 2 chosen** → OK on "Ema - Work" opened the picker with the calendar's name as
+  its title, the same palette list as Launcher → Background → Colour, and **Amber · In use** already focused
+  and scrolled into view (screenshot).
+- Done on both closed back to the Calendar page; `calendar_colours` is unchanged (the check changed no
+  colour).
