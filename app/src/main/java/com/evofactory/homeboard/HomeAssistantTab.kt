@@ -698,13 +698,16 @@ private fun AssistantCard(
     onLeave: () -> Unit,
     minHeight: Dp? = null,
     maxHeight: Dp? = null,
-    content: @Composable (raised: Boolean, firstButton: FocusRequester, onButtonFocused: (Int) -> Unit) -> Unit,
+    // onButtonFocused: the row's place in the card, and whether that row uses left and right itself
+    content: @Composable (raised: Boolean, firstButton: FocusRequester, onButtonFocused: (Int, Boolean) -> Unit) -> Unit,
 ) {
     val card = remember { FocusRequester() }
     val firstButton = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
     var focusedButton by remember { mutableIntStateOf(0) }
+    // The focused row steps a level with left and right: those keys are the row's, not the card's
+    var focusedSteps by remember { mutableStateOf(false) }
     // Selected, it comes into view clear of the fades
     val bringer = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
@@ -740,7 +743,9 @@ private fun AssistantCard(
                         val edge = when (event.key) {
                             Key.DirectionUp -> focusedButton == 0
                             Key.DirectionDown -> focusedButton == buttons - 1
-                            else -> true
+                            // Left and right belong to a row that steps its level: the card must not take
+                            // them, or the brightness/percentage affordance is drawn and never works
+                            else -> !focusedSteps
                         }
                         if (!edge) return@onPreviewKeyEvent false
                         if (!release) {
@@ -798,7 +803,7 @@ private fun AssistantCard(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (maxHeight == null) {
-            content(entered, firstButton) { focusedButton = it }
+            content(entered, firstButton) { index, steps -> focusedButton = index; focusedSteps = steps }
         } else {
             // Scrolls inside the card, fading out at its edges; its buttons come into view as they're selected
             CompositionLocalProvider(LocalBringIntoViewSpec provides MinimalScroll) {
@@ -806,7 +811,7 @@ private fun AssistantCard(
                     Modifier.fadingEdges(inner).verticalScroll(inner).padding(vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    content(entered, firstButton) { focusedButton = it }
+                    content(entered, firstButton) { index, steps -> focusedButton = index; focusedSteps = steps }
                 }
             }
         }
@@ -860,7 +865,7 @@ private fun CardContent(
     entered: Boolean,
     raised: Boolean,
     firstButton: FocusRequester,
-    onButtonFocused: (Int) -> Unit,
+    onButtonFocused: (Int, Boolean) -> Unit,
 ) {
     // What the remote lands on once in the card, in order: buttons and switches
     val interactive = card.ids.filter(::isInteractive)
@@ -888,7 +893,7 @@ private fun CardContent(
         }
         val modifier = Modifier
             .then(if (index == 0) Modifier.focusRequester(firstButton) else Modifier)
-            .onFocusChanged { if (it.isFocused) onButtonFocused(index) }
+            .onFocusChanged { if (it.isFocused) onButtonFocused(index, entityLevel(connection.entities[id]) != null) }
             // Only once gone into the card
             .focusProperties { canFocus = entered }
         if (id.startsWith(ServicePrefix)) {
@@ -923,9 +928,23 @@ private fun CardHeading(text: String, modifier: Modifier = Modifier) {
 /** Alarms are interactive on their own: OK picks a service, then the code is typed */
 private fun isAlarm(id: String) = id.substringBefore('.') == "alarm_control_panel"
 
-/** Buttons (scenes, scripts, buttons), switches (lights, switches, automations…) and selects: what OK acts on in a card */
+/**
+ * Buttons (scenes, scripts, buttons), switches (lights, switches, automations…), selects, alarms, robots
+ * and chosen services: what OK acts on in a card. A row missing here is drawn but cannot be reached —
+ * the remote stops at the row above it (this is how the vacuum row sat past the end of its card).
+ */
 private fun isInteractive(id: String) =
-    isHaAction(id) || isHaToggle(id) || isHaSelect(id) || isAlarm(id) || id.startsWith(ServicePrefix)
+    isHaAction(id) || isHaToggle(id) || isHaSelect(id) || isAlarm(id) || isHaVacuum(id) || id.startsWith(ServicePrefix)
+
+/** A light's level or a fan's percentage, as 0-100: the rows that step with left and right */
+internal fun entityLevel(entity: HaEntity?): Int? {
+    if (entity == null) return null
+    return when (entity.id.substringBefore('.')) {
+        "light" -> entity.attributes.optInt("brightness", -1).takeIf { it >= 0 }?.let { (it * 100 / 255).coerceIn(0, 100) }
+        "fan" -> entity.attributes.optInt("percentage", -1).takeIf { it >= 0 }
+        else -> null
+    }
+}
 
 /**
  * A light, switch, fan or input boolean: a sensor row with a switch at its end, showing whether
@@ -940,12 +959,7 @@ private fun ToggleRow(connection: HaConnection, id: String, name: String?, modif
     val on = entity?.state == "on"
     val ready = connection.session != null
     // A light's level is 0-255, a fan's a percentage; both read as a percentage here
-    val domain = id.substringBefore('.')
-    val level = when (domain) {
-        "light" -> entity?.attributes?.optInt("brightness", -1)?.takeIf { it >= 0 }?.let { (it * 100 / 255).coerceIn(0, 100) }
-        "fan" -> entity?.attributes?.optInt("percentage", -1)?.takeIf { it >= 0 }
-        else -> null
-    }
+    val level = entityLevel(entity)
     val steppable = level != null
     val step = { delta: Int ->
         val wanted = ((level ?: 100) + delta).coerceIn(1, 100)

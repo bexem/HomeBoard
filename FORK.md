@@ -1370,3 +1370,48 @@ sends no names or descriptions, so nothing but the service names is shown. `inpu
   seen).
 - **Puts back**: `ha_services` removed, so the list is empty as it was found (68 keys, the two additions
   below are the default values of keys the rows wrote).
+
+## The Assistant tab's rows are reachable, and left/right act on them (2026-11-13)
+
+Ema, from the TV: "I can't select Yiko at all: I can scroll down to the air purifier, but one more Down
+goes to the favourite app row. I can't select the bedroom entities. I can't change the brightness of the
+lights or the air purifier."
+
+Two causes, both in `HomeAssistantTab.kt`:
+
+1. **A vacuum row was drawn but never reachable.** `isInteractive(id)` — the function that decides which
+   rows a card can select and counts them for the card's Down edge — listed scenes/scripts, switches,
+   selects, alarms and the new services, but not `isHaVacuum`. So the Living Room card had five rows but
+   only four selectable: the selection fell off the card at the air purifier, and the vacuum's Start /
+   Pause / Return / **Clean a room** menu could not be opened at all (which is why F8's menu was never
+   seen). The Bedroom card held one robot and one sensor, so it had *no* selectable row and OK did
+   nothing there.
+2. **The card swallowed left and right before the row saw them.** In `AssistantCard`'s `onPreviewKeyEvent`,
+   any arrow key with a direction treated left/right as `edge = true` and called `moveFocus`, returning
+   true — and a preview handler on the card runs before the focused row. `ToggleRow`'s brightness and
+   percentage stepping therefore never ran, while the row's hint ("14% ◂ ▸", "Off · ◂ ▸ sets the level")
+   promised it did.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistantTab.kt` | `isInteractive` gains `isHaVacuum`, with a comment saying what a missing entry costs; `entityLevel(entity)` extracted so the card and `ToggleRow` read a light's brightness or a fan's percentage the same way; the card reports whether the focused row steps a level, and only leaves the card on left/right when it does not |
+
+### Deliberate designs worth keeping
+
+- **One list decides reachability.** `isInteractive` is the only thing that counts a row for the card's
+  arrow edges *and* decides whether it can take the selection; a row type missing there looks present and
+  is dead to the remote.
+- **A row's own keys win inside the card.** Level rows keep left/right; every other row passes them to the
+  card, which moves the selection out sideways as before.
+
+### Verified on the Shield (2026-11-13, 15:05–15:08)
+
+- Assistant → Living Room, gone into, walked down: Main light, Stand, LED strip, Air purifier, **Yiko** —
+  Yiko is lit, and OK opened its menu: **Start / Clean a room**. "Clean a room" opened **"Clean which
+  room?"** with the robot's own rooms: Dining room, Living room1, Corridor1, Kitchen, Bathroom. Nothing was
+  started (Back closed both menus); this is also the F8 UI check that session could not reach.
+- **LED strip, Left**: 80 % → 69 % on screen and the row kept the selection, so left/right now reach the
+  row. The level was put back to 80 % (`brightness: 204`) with Home Assistant's own service.
+- Bedroom now has Baka as a selectable row; its sensor stays a readout, which is what a sensor is.
