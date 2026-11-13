@@ -285,6 +285,8 @@ fun HaAssistantTab(
     LaunchedEffect(viewIndex) { scroll.scrollTo(0) }
     // The card whose buttons the remote moves between, after OK on it; Back leaves it
     var entered by remember { mutableStateOf<String?>(null) }
+    // The weather whose forecast is open: OK on a weather card is what opens it
+    var forecastFor by remember { mutableStateOf<String?>(null) }
     val message = haStatusMessage(connection)
         ?: "This dashboard is built by Home Assistant itself: your selection shows instead".takeIf { missing }
         ?: "Nothing on this dashboard can be shown here".takeIf { board != null && views.isEmpty() }
@@ -366,6 +368,8 @@ fun HaAssistantTab(
                     entered = entered == card.key,
                     onEnter = { entered = card.key },
                     onLeave = { entered = null },
+                    // A weather card has nothing to go into: OK asks for its forecast instead
+                    onOpen = weather?.let { id -> { forecastFor = id } },
                     minHeight = minHeight,
                     maxHeight = maxHeight,
                 ) { raised, firstButton, onButtonFocused ->
@@ -418,6 +422,14 @@ fun HaAssistantTab(
                 modifier = Modifier.padding(horizontal = inset),
             )
         }
+    }
+    forecastFor?.let { id ->
+        WeatherForecastDialog(
+            entity = entities[id],
+            daily = connection.daily[id],
+            hourly = connection.hourly[id],
+            onDismiss = { forecastFor = null },
+        )
     }
 }
 
@@ -696,6 +708,8 @@ private fun AssistantCard(
     entered: Boolean,
     onEnter: () -> Unit,
     onLeave: () -> Unit,
+    // OK on a card with nothing to go into, e.g. a weather card's forecast
+    onOpen: (() -> Unit)? = null,
     minHeight: Dp? = null,
     maxHeight: Dp? = null,
     // onButtonFocused: the row's place in the card, and whether that row uses left and right itself
@@ -758,10 +772,14 @@ private fun AssistantCard(
                         }
                         true
                     }
-                    !entered && focused && buttons > 0 && event.key in OkKeys -> {
+                    !entered && focused && (buttons > 0 || onOpen != null) && event.key in OkKeys -> {
                         if (release) {
-                            onEnter()
-                            moveFocus = true
+                            if (buttons > 0) {
+                                onEnter()
+                                moveFocus = true
+                            } else {
+                                onOpen?.invoke()
+                            }
                         }
                         true
                     }

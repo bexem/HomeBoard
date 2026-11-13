@@ -1415,3 +1415,32 @@ Two causes, both in `HomeAssistantTab.kt`:
 - **LED strip, Left**: 80 % → 69 % on screen and the row kept the selection, so left/right now reach the
   row. The level was put back to 80 % (`brightness: 204`) with Home Assistant's own service.
 - Bedroom now has Baka as a selectable row; its sensor stays a readout, which is what a sensor is.
+
+## OK on the weather opens its forecast (2026-11-13)
+
+Ema: "Clicking on the weather should bring up a popup with a forecast of the other days." The data was
+already there — the panel follows `hourly` and `daily` for every chosen weather (M13) and only the card's
+own reading was drawn.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `HomeAssistantTab.kt` | `AssistantCard` takes an `onOpen`: on a card with nothing to go into, OK calls it instead of doing nothing. A weather card passes it (`forecastFor`), and the dialog is drawn once, after the cards |
+| `HomeAssistantWeather.kt` | `WeatherForecastDialog`: the weather's name and its now-line, then one row per day — Today / Tomorrow / "Sun 15 Nov", condition icon and label, high/low, rain % or mm — and the next eight hours underneath. A server that gives no forecast says so instead of showing an empty box |
+
+### Deliberate designs worth keeping
+
+- **A weather card is a readout with a door**, not a row: it keeps its own card, its hourly strip and its
+  size, and OK on the card is the door. Nothing else in the card is selectable, so the card's arrow edges
+  are untouched.
+- **The data is the server's.** Nothing is invented: the days are Home Assistant's `daily` forecast as the
+  integration emits it, and an integration with no forecast gets the honest line.
+
+### Verified on the Shield (2026-11-13, 15:11)
+
+- Assistant tab → OK on the weather card opened **"Outside · Partly cloudy · 6°"** with eight days — Today
+  7° / -1° rain 20 %, Tomorrow 8° / 0° cloudy, Sun 15 Nov rain, Mon/Tue sleet, Wed rain 20 %, Thu sunny,
+  Fri cloudy — and "Next hours" 15:00–22:00 with temperatures and the 20 % hour (screenshot).
+- Close returned to the card. The card's own arrow edges (Up to the tab, Down to the next card) are
+  unchanged: it is still one card.
