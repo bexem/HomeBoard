@@ -1475,3 +1475,43 @@ per-row layout, its own palette `ContextMenu` and its own left/right cycling.
   and scrolled into view (screenshot).
 - Done on both closed back to the Calendar page; `calendar_colours` is unchanged (the check changed no
   colour).
+
+## The badge counts a source, and the dot stands down for it (2026-11-13)
+
+Ema: "The badge should be for the Android notifications OR for Frigate alerts; clicking it opens the
+notification panel or the Alerts tab accordingly. If the badge is active for Frigate alerts, the dot on the
+Alerts tab is automatically disabled; if the badge is active for the Android notifications, the dot is
+active."
+
+M10 had deleted the source choice ("a dot says enough"). This restores M9's key with the coupling M9 never
+had.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | `badgeSource` over `badge_source` (M9's own key, so an M9-era export still reads), values `frigate` (default) and `notifications`, with `BADGE_SOURCE_*` constants; an unknown value falls back to `frigate` |
+| `SettingsSchema.kt` | Advanced → Top bar: **The count is** (a Choice row) directly under **New events badge**, shown only while the badge is on. The badge row's `showIf` no longer demands the Alerts tab when the count is the TV's notifications; the three descriptions now say what each does |
+| `MainActivity.kt` | `badgeSource` state, read at start and in both re-read blocks; the count is the chosen source (Frigate's unseen alerts, or `Notifications.entries.size`); OK opens the panel for notifications and the Alerts tab for Frigate; the dot is Frigate's and is suppressed while the badge already counts Frigate |
+
+### Deliberate designs worth keeping
+
+- **The coupling is derived, never written.** `alerts_dot` keeps exactly one editor (its row); the render
+  applies `&& !frigateCounted`, so no pref has two writers and M10's one-editor rule survives the reversal.
+- **Each indicator keeps its own source.** The badge says what you chose; the dot always means Frigate, and
+  only stands down when the badge is already saying it.
+- **M10's removal is superseded on the record.** The ledger line is what stops a rebase resurrecting it.
+
+### Verified on the Shield (2026-11-13, 15:23–15:30)
+
+- Advanced → Top bar showed **The count is · Frigate alerts** under the badge; its menu offers *Frigate
+  alerts ✓* and *The TV's notifications*.
+- Choosing **The TV's notifications** put the red **8** beside the clock at once (the live list, no restart),
+  and OK on the badge opened the **Notifications** panel (QuickBars, SHIELD Experience Upgrade, tvQuickActions
+  ×2, Shield SMB Server, DolbyAudioService, Android TV Remote Service).
+- With the source back on **Frigate alerts**, the dot's expression reads
+  `alertsDot && !frigateCounted && …`; the suppression itself was not seen, because this Frigate has no
+  unseen alerts to draw a dot from.
+- Puts back: `badge=true`, `badge_source=frigate` (the state FORK.md's M10 section records; the badge had
+  been left off by an earlier stray press and was restored with a checked host write — file size and key
+  count asserted before and after, 68 keys both times).

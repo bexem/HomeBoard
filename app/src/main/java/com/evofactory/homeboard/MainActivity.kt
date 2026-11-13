@@ -106,6 +106,8 @@ class MainActivity : ComponentActivity() {
     private var badge by mutableStateOf(false)
     // The dot on the Alerts tab, and the count beside the clock, both from the same read
     private var alertsDot by mutableStateOf(true)
+    // What the count beside the clock counts: Frigate's alerts, or the TV's own notifications
+    private var badgeSource by mutableStateOf(BADGE_SOURCE_FRIGATE)
     private var notificationsOpen by mutableStateOf(false)
     // The grant's own status screen, which is what "Access" means once it is granted
     private var notificationGrantOpen by mutableStateOf(false)
@@ -253,6 +255,7 @@ class MainActivity : ComponentActivity() {
         shuffleSides = prefs.shuffleSides
         badge = prefs.badge
         alertsDot = prefs.alertsDot
+        badgeSource = prefs.badgeSource
         appIconOverrides = prefs.appIcons.associate { it.substringBefore('=') to it.substringAfter('=') }
         shuffleSeed = Shuffle.rollIfDue(prefs)
         channelKeys = prefs.channelKeys
@@ -368,7 +371,9 @@ class MainActivity : ComponentActivity() {
                     var continueActive by remember { mutableStateOf(false) }
                     val frigateFeed = rememberFrigateFeed(frigate, onCertificateAccepted = { saveFrigate(frigate.copy(certPin = it)) })
                     // The badge counts what arrived since the Alerts tab was last opened
-                    LaunchedEffect(badge, alertsDot, frigate, frigateFeed, tab) {
+                    // The badge counts Frigate only while that is what it counts; the dot always does
+                    val frigateCounted = badge && badgeSource == BADGE_SOURCE_FRIGATE
+                    LaunchedEffect(badge, badgeSource, alertsDot, frigate, frigateFeed, tab) {
                         // Either indicator shows that something arrived, so either needs the count
                         if ((!badge && !alertsDot) || !frigate.isSet) {
                             newEvents = 0
@@ -514,12 +519,24 @@ class MainActivity : ComponentActivity() {
                             assistantTabFocus = assistantTabFocus,
                             onHomeTabSelected = { homeTabSelected = it },
                             showFreeMemory = showFreeMemory,
-                            newEvents = if (badge && frigate.isSet && alertsTab) newEvents else 0,
-                            alertsDot = alertsDot && frigate.isSet && alertsTab && newEvents > 0,
+                            // The count is the chosen source: Frigate's unseen alerts, or the TV's list
+                            newEvents = when {
+                                !badge -> 0
+                                badgeSource == BADGE_SOURCE_NOTIFICATIONS -> Notifications.entries.size
+                                frigate.isSet && alertsTab -> newEvents
+                                else -> 0
+                            },
+                            // The dot is Frigate's, and stands down while the badge already counts Frigate
+                            alertsDot = alertsDot && !frigateCounted && frigate.isSet && alertsTab && newEvents > 0,
                             onNewEvents = {
-                                // The count is cleared the moment the tab opens, so the focus goes with it
-                                tab = HomeTab.Alerts
-                                runCatching { alertsTabFocus.requestFocus() }
+                                if (badgeSource == BADGE_SOURCE_NOTIFICATIONS) {
+                                    // The count is the notifications: OK opens what it counts
+                                    notificationsOpen = true
+                                } else {
+                                    // The count is cleared the moment the tab opens, so the focus goes with it
+                                    tab = HomeTab.Alerts
+                                    runCatching { alertsTabFocus.requestFocus() }
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1176,6 +1193,8 @@ class MainActivity : ComponentActivity() {
                                 alertsTab = prefs.alertsTab
                                 badge = prefs.badge
                                 alertsDot = prefs.alertsDot
+            badgeSource = prefs.badgeSource
+                                badgeSource = prefs.badgeSource
                                 homeOverrideChanged()
                             },
                             onDismiss = { settingsOpen = false },
