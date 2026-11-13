@@ -579,10 +579,14 @@ private fun rowSummary(setting: SettingDef, prefs: LauncherPrefs): String {
         "cameras" -> if (prefs.cameras.isEmpty()) "None yet" else "${prefs.cameras.size} cameras"
         "frigate" -> prefs.frigate.url.ifEmpty { "Not set up" }
         "assistant_display", "home_display" -> {
-            // Null is the chosen entities; "" is Home Assistant's default dashboard, "Overview"
-            val dashboard = if (setting.key == "assistant_display") prefs.haDashboard else prefs.haHomeDashboard
+            // Null is the chosen entities; "" is Home Assistant's default dashboard, which the dialog
+            // saves by its title ("Overview"). The label is what the dialog wrote when it saved.
+            val assistant = setting.key == "assistant_display"
+            val dashboard = if (assistant) prefs.haDashboard else prefs.haHomeDashboard
+            val label = if (assistant) prefs.haDashboardLabel else prefs.haHomeDashboardLabel
             when {
                 dashboard == null -> "My selection"
+                label.isNotEmpty() -> label
                 dashboard.isEmpty() -> "Home Assistant's own"
                 else -> dashboard
             }

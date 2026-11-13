@@ -976,9 +976,10 @@ private fun ToggleRow(connection: HaConnection, id: String, name: String?, modif
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (steppable && on) {
+                // The keys act whether or not it is on, so the hint says so instead of appearing late
+                if (steppable) {
                     Text(
-                        "${level ?: 0}%   ◂ ▸",
+                        if (on) "${level ?: 0}%   ◂ ▸" else "Off · ◂ ▸ sets the level",
                         style = MaterialTheme.typography.labelSmall,
                         color = LocalContentColor.current.copy(alpha = 0.7f),
                         maxLines = 1,

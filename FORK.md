@@ -1199,3 +1199,41 @@ Long-press on **Plezy** on the Home row (a pinned app) opened the tile menu, rea
 
 "Set icon" is there on the pinned branch, which is the fix; before it the menu stopped at "Unpin from
 favourites". No icon was set and no app was unpinned.
+
+## F10 — wording and status batch (2026-11-13)
+
+W1, W2, W5, W6, W7, W8 (W7 decided by Ema: the keys act on an off light **and** the hint shows).
+
+### Touched files
+
+| File | Ref | Change |
+|---|---|---|
+| `SettingsSchema.kt` | W1, W2 | "Camera list" no longer advertises the screensaver (it left in M12): "The addresses, their order and shape, and how they play in the grid". "Per line" → **"Lines"**: the value *is* the number of lines, and more lines make smaller tiles |
+| `HomeAssistantPanel.kt` | W5 | The status line moved above the `if (!showSensors) return@Column`, so "Home Assistant offline · retrying" also shows when the sensors card is off and the calendar has the space |
+| `Cameras.kt` | W6 | The camera dialog's Advanced switches use the page's names and descriptions: "Live pictures in the grid", "One stream at a time" |
+| `HomeAssistantTab.kt` | W7 | The level hint shows whenever the row is steppable: `N% ◂ ▸` while on, **"Off · ◂ ▸ sets the level"** while off |
+| `LauncherPrefs.kt`, `HomeAssistantDialog.kt`, `MainActivity.kt`, `SettingsPage.kt` | W8 | The chosen dashboard's *title* is stored when the dialog saves (`ha_dashboard_label`, `ha_home_dashboard_label` — two new local keys, not exported) and the row prints it instead of the raw key |
+
+### Deliberate designs worth keeping
+
+- **W8's label is a cache of a name, not a setting.** It is written on save because only the dialog reads
+  the dashboard list; a missing label falls back to the key, and "My selection" is decided by the choice
+  itself, so an old TV without the keys reads exactly as before.
+- **One name per switch.** W6 exists because M11 renamed the page rows and left the dialog behind; the two
+  editors now say the same words, and the descriptions are the page's.
+
+### Verified on the Shield (2026-11-13, 11:1x–11:2x)
+
+- Home → **Lines · 6** — "Rows when the page scrolls sideways, columns when it scrolls up and down; more
+  lines, smaller tiles" (screenshot).
+- Cameras → **Camera list** — "The addresses, their order and shape, and how they play in the grid"; the
+  word "screensaver" is gone.
+- Camera list → **Advanced** — "Live pictures in the grid" (on) and "One stream at a time" (off), with the
+  page's descriptions (screenshot).
+- Assistant tab: the **Air purifier** row, off, reads **"Off · ▂ ▸ sets the level"** (screenshot).
+- Assistant → *What it shows · My selection*: Ema's choice is the device selection, so the label path is not
+  what this TV shows. W8's fallback is what was seen; choosing a dashboard to see a title would have
+  rewritten his choice twice, so it was not done.
+- W5 was not seen during an outage: the line is moved above the sensors-card gate in the composition
+  (verified by reading the change and by the page building without it), but no outage was created on the
+  live TV to watch it appear.

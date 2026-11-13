@@ -765,18 +765,18 @@ private fun CameraAdvancedSettings(
             .joinToString(" · ") { (label, type) -> "$label: ${maxDecoders(type) ?: "none"}" }
     }
     SwitchRow(
-        title = "Show substreams on the Cameras tab",
+        title = "Live pictures in the grid",
         on = playSubstreams,
         onToggle = { onPlaySubstreamsChange(!playSubstreams) },
         modifier = modifier.padding(top = 8.dp).fillMaxWidth(),
-        description = "Plays them live, as many as this TV can decode at once. Off: still pictures only.",
+        description = "Off shows each camera's last picture, for TVs with few video decoders",
     )
     SwitchRow(
-        title = "Minimize simultaneous video streams",
+        title = "One stream at a time",
         on = minimizeStreams,
         onToggle = { onMinimizeStreamsChange(!minimizeStreams) },
         modifier = lastModifier.fillMaxWidth(),
-        description = "For older TVs",
+        description = "For older TVs: the cameras stop while a clip plays, and decoders open one at a time",
     )
     Text(
         "Maximum decoders on this TV: $limits",

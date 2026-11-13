@@ -891,7 +891,7 @@ class MainActivity : ComponentActivity() {
                             initialTab = haDialogTab ?: HaDialogTab.Home,
                             // The Home Assistant row is the connection, so it opens there
                             connectionFirst = haConnectFirst,
-                            onSave = { server, username, entities, homeEntities, topBar, display ->
+                            onSave = { server, username, entities, homeEntities, topBar, display, dashboardTitles ->
                                 // A replaced username-and-password login is ended in Home Assistant
                                 if (haServer.refreshToken != server.refreshToken) revokeHaLogin(haServer)
                                 haServer = server
@@ -902,6 +902,9 @@ class MainActivity : ComponentActivity() {
                                 saveHaChoice(entities, homeEntities, topBar)
                                 haDisplay = display
                                 prefs.haDisplay = display
+                                // What the rows print: the chosen dashboard's title, not its key
+                                prefs.haDashboardLabel = dashboardTitles.first
+                                prefs.haHomeDashboardLabel = dashboardTitles.second
                                 // The page behind the dialog shows these choices on its rows
                                 settingsRevision++
                             },

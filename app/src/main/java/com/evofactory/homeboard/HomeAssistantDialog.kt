@@ -104,6 +104,8 @@ fun HomeAssistantDialog(
         homeEntities: List<String>,
         topBar: List<String>,
         display: HaDisplay,
+        // The two chosen dashboards' own titles, for the rows that print them
+        dashboardTitles: Pair<String, String>,
     ) -> Unit,
     onLogOut: () -> Unit,
     onDiscardLogin: (HaServer) -> Unit,
@@ -470,6 +472,8 @@ fun HomeAssistantDialog(
                 val ids = entities.map { it.id }.toSet()
                 val chosen = selected.filter { it in ids }
                 val homeChosen = homeSelected.filter { it in ids }
+                fun titleOf(key: String?): String =
+                    if (key == null) "" else boards.firstOrNull { it.first.key == key }?.first?.title ?: key
                 onSave(
                     server,
                     if (server.refreshToken.isEmpty()) "" else loginUsername,
@@ -477,6 +481,7 @@ fun HomeAssistantDialog(
                     homeChosen,
                     topBar.filter { it in chosen },
                     initialDisplay.copy(dashboard = dashboard, homeDashboard = homeDashboard),
+                    titleOf(dashboard) to titleOf(homeDashboard),
                 )
                 unsavedLogin = null
                 onDismiss()

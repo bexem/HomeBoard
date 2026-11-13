@@ -138,6 +138,16 @@ class LauncherPrefs(context: Context) {
     val haDashboard: String? get() = haDisplay.dashboard
     val haHomeDashboard: String? get() = haDisplay.homeDashboard
 
+    // The chosen dashboard's own title, so a row can print "Config" instead of "lovelace-config".
+    // Cosmetic and local: written when the dialog saves, never part of an export.
+    var haDashboardLabel: String
+        get() = prefs.getString("ha_dashboard_label", "").orEmpty()
+        set(value) = prefs.edit { putString("ha_dashboard_label", value) }
+
+    var haHomeDashboardLabel: String
+        get() = prefs.getString("ha_home_dashboard_label", "").orEmpty()
+        set(value) = prefs.edit { putString("ha_home_dashboard_label", value) }
+
     var haBottomRow: Boolean
         get() = haDisplay.bottomRow
         set(value) { haDisplay = haDisplay.copy(bottomRow = value) }

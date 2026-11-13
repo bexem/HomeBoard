@@ -395,6 +395,11 @@ fun HomeAssistantPanel(
             focus = if (showSensors) null else sensorsFocus,
             modifier = if (showSensors) Modifier else Modifier.weight(1f),
         )
+        // Before the sensors card's own gate: with the card off the calendar has the space, and an
+        // outage must still say so instead of only dimming the events
+        haStatusMessage(connection)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (!showSensors) return@Column
         // Takes all the height left, however many sensors there are; those that don't fit fade out
         val cardColor = MaterialTheme.colorScheme.surfaceVariant
@@ -438,9 +443,6 @@ fun HomeAssistantPanel(
                     .height(SensorFadeHeight)
                     .background(Brush.verticalGradient(listOf(cardColor.copy(alpha = 0f), cardColor))),
             )
-        }
-        haStatusMessage(connection)?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
