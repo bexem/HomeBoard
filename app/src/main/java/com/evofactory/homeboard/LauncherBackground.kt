@@ -89,16 +89,16 @@ private fun BackgroundImage(path: String, fit: String) {
 
 /** The colours the background picker offers: dark first, so a slip of the remote stays readable */
 val BackgroundColours = listOf(
-    "Black" to 0xFF000000.toInt(),
-    "Charcoal" to 0xFF1C1B1F.toInt(),
-    "Slate" to 0xFF1F2A37.toInt(),
-    "Navy" to 0xFF101C33.toInt(),
-    "Forest" to 0xFF12251A.toInt(),
-    "Plum" to 0xFF24122B.toInt(),
-    "Maroon" to 0xFF2B1216.toInt(),
-    "Teal" to 0xFF0E2A2A.toInt(),
-    "Grey" to 0xFF3A3A3F.toInt(),
-    "Sand" to 0xFFD8C9A8.toInt(),
-    "Sky" to 0xFFBBD7E8.toInt(),
-    "Bone" to 0xFFEDE8DE.toInt(),
+    ColourEntry("Black", 0xFF000000.toInt()),
+    ColourEntry("Charcoal", 0xFF1C1B1F.toInt()),
+    ColourEntry("Slate", 0xFF1F2A37.toInt()),
+    ColourEntry("Navy", 0xFF101C33.toInt()),
+    ColourEntry("Forest", 0xFF12251A.toInt()),
+    ColourEntry("Plum", 0xFF24122B.toInt()),
+    ColourEntry("Maroon", 0xFF2B1216.toInt()),
+    ColourEntry("Teal", 0xFF0E2A2A.toInt()),
+    ColourEntry("Grey", 0xFF3A3A3F.toInt()),
+    ColourEntry("Sand", 0xFFD8C9A8.toInt()),
+    ColourEntry("Sky", 0xFFBBD7E8.toInt()),
+    ColourEntry("Bone", 0xFFEDE8DE.toInt()),
 )

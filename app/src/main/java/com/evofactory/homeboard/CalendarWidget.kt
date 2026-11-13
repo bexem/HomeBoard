@@ -88,7 +88,7 @@ private val CalendarCardHeight = 132.dp
 @Composable
 private fun CalendarEntry(event: HaEvent, config: CalendarConfig, today: LocalDate) {
     val index = config.entities.indexOf(event.calendarId)
-    val colour = colourOf(calendarColour(config.colours, event.calendarId) ?: CalendarPalette.getOrNull(index)?.hex)
+    val colour = colourOf(calendarColour(config.colours, event.calendarId) ?: CalendarPalette.getOrNull(index)?.hex())
     Row(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier

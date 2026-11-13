@@ -842,3 +842,41 @@ bird: **no badge**. Two things were tried on it and one was rejected:
 
 Verified in both rail states: on the dark rail the bird holds its shape, and on the focused light row the
 dark tint reads as clearly as the Home or Cameras glyphs beside it.
+
+## C3 — one colour picker (2026-11-13)
+
+The audit's findings #1 and #7: the background's palette dialog and the calendar's colour dialog were the
+same dialog twice, over two palette definitions of the same shape.
+
+### New files
+
+| File | What it is |
+|---|---|
+| `ColourPickerDialog.kt` | `ColourEntry(name, argb)` (+ `hex()` for the callers that store hex), and `ColourPickerDialog(title, subtitle, palette, current, onPick, onDismiss)`: a dot, its name, and "In use" on the current one, in a scrolling list with a Done button |
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `BackgroundPickers.kt` | Deleted: it held nothing but `BackgroundColourDialog`, which the shared picker replaces |
+| `LauncherBackground.kt` | `BackgroundColours` is a `List<ColourEntry>`: same 12 colours, same order |
+| `HaCalendar.kt` | `CalendarTint` → `ColourEntry` for the same 8 tints; `colourOf` moved here from the calendar dialog, beside the palette it reads |
+| `CalendarColoursDialog.kt` | Reads the palette as `ColourEntry` (`entry.hex().equals(hex, true)`); behaviour unchanged — per-calendar rows, left/right cycling, the OK menu naming each colour with the current one ticked |
+| `CalendarWidget.kt` | One line: `?.hex` → `?.hex()` |
+| `MainActivity.kt` | The background colour row opens the shared picker with its own title and subtitle |
+
+### Deliberate designs worth keeping
+
+- **Storage did not move.** The calendar still stores `calendar_colours` as `id=#RRGGBB` lines and the
+  background still stores `background_colour` as an Int, so an export file and every existing pref read
+  exactly as before; `ColourEntry.hex()` is the only conversion, at the boundary.
+- **The palette is data, the dialog is one renderer.** A future palette (a screensaver tint, an entity
+  colour) is a `List<ColourEntry>` and a call, not another dialog.
+
+### Verified on the Shield (2026-11-13, 09:5x)
+
+- Launcher → Background → **Colour** opened "Background colour" with its subtitle, Done and the twelve
+  entries; the current one read **In use** (Black at the start).
+- Picking **Charcoal** closed the dialog and wrote `background_colour=-14935265` (`0xFF1C1B1F`);
+  reopening showed **In use** on Charcoal. Picking **Teal** wrote `-15848918` (`0xFF0E2A2A`).
+- Puts back: **Black** (`-16777216`), the value Ema had.

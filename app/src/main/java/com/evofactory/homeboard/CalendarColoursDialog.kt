@@ -17,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -85,8 +84,8 @@ fun CalendarColoursDialog(
     ) {
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
             items(chosen, key = { it }) { id ->
-                val hex = calendarColour(picked, id) ?: CalendarPalette.getOrNull(chosen.indexOf(id))?.hex
-                val name = CalendarPalette.firstOrNull { it.hex.equals(hex, ignoreCase = true) }?.name
+                val hex = calendarColour(picked, id) ?: CalendarPalette.getOrNull(chosen.indexOf(id))?.hex()
+                val name = CalendarPalette.firstOrNull { it.hex().equals(hex, ignoreCase = true) }?.name
                     ?: CalendarPalette.getOrNull(chosen.indexOf(id))?.name
                     ?: "Green"
                 ListItem(
@@ -121,8 +120,8 @@ fun CalendarColoursDialog(
             ContextMenu(
                 title = names[id] ?: id,
                 actions = CalendarPalette.map { entry ->
-                    MenuAction(if (entry.hex.equals(current, true)) "${entry.name} ✓" else entry.name) {
-                        choose(id, entry.hex)
+                    MenuAction(if (entry.hex().equals(current, true)) "${entry.name} ✓" else entry.name) {
+                        choose(id, entry.hex())
                         menuFor = null
                     }
                 },
@@ -132,9 +131,3 @@ fun CalendarColoursDialog(
     }
 }
 
-/** "#RRGGBB" from the palette, or the palette's first colour when nothing is chosen */
-fun colourOf(hex: String?): Color {
-    val text = hex?.removePrefix("#") ?: return Color(0xFF7CB342)
-    val value = runCatching { text.toLong(16) }.getOrNull() ?: return Color(0xFF7CB342)
-    return Color(0xFF000000 or value)
-}

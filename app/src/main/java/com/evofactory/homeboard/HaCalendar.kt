@@ -1,5 +1,6 @@
 package com.evofactory.homeboard
 
+import androidx.compose.ui.graphics.Color
 import java.net.URLEncoder
 import java.time.Instant
 import java.time.LocalDate
@@ -114,23 +115,20 @@ suspend fun haCalendarEvents(server: HaServer, entityId: String, start: Instant,
         }
     }
 
-/** A colour a calendar can be given, by the name the settings menu shows */
-data class CalendarTint(val name: String, val hex: String)
-
 /**
- * The colours the calendar card offers. Home Assistant keeps no colour for a calendar entity over its
+ * The colours the calendar card offers. Home Assistant keeps no colour for a calendar entity over the
  * API (the state carries only times and the message), so the colour is chosen here; the order matches
  * the colours Home Assistant's own calendar card hands out, for the calendars nobody changes.
  */
 val CalendarPalette = listOf(
-    CalendarTint("Green", "#7CB342"),
-    CalendarTint("Pink", "#D81B60"),
-    CalendarTint("Blue", "#1E88E5"),
-    CalendarTint("Red", "#E53935"),
-    CalendarTint("Orange", "#FB8C00"),
-    CalendarTint("Teal", "#00897B"),
-    CalendarTint("Purple", "#8E24AA"),
-    CalendarTint("Amber", "#FFB300"),
+    ColourEntry("Green", 0xFF7CB342.toInt()),
+    ColourEntry("Pink", 0xFFD81B60.toInt()),
+    ColourEntry("Blue", 0xFF1E88E5.toInt()),
+    ColourEntry("Red", 0xFFE53935.toInt()),
+    ColourEntry("Orange", 0xFFFB8C00.toInt()),
+    ColourEntry("Teal", 0xFF00897B.toInt()),
+    ColourEntry("Purple", 0xFF8E24AA.toInt()),
+    ColourEntry("Amber", 0xFFFFB300.toInt()),
 )
 
 /** The colour chosen for [id], or null to use the palette colour of its position */
@@ -140,11 +138,18 @@ fun calendarColour(choices: List<String>, id: String): String? =
 /** [choices] with [id] moved [delta] steps through the palette, from its current colour */
 fun cycleCalendarColour(choices: List<String>, id: String, delta: Int): List<String> {
     val current = calendarColour(choices, id)
-    val start = CalendarPalette.indexOfFirst { it.hex.equals(current, ignoreCase = true) }
+    val start = CalendarPalette.indexOfFirst { it.hex().equals(current, ignoreCase = true) }
     // No colour yet: the first press starts from the palette's first
     val from = if (start >= 0) start else 0
     val next = (from + delta).mod(CalendarPalette.size)
-    return choices.filterNot { it.startsWith("$id=") } + "$id=${CalendarPalette[next].hex}"
+    return choices.filterNot { it.startsWith("$id=") } + "$id=${CalendarPalette[next].hex()}"
+}
+
+/** "#RRGGBB" from the palette, or the palette's first colour when nothing is chosen */
+fun colourOf(hex: String?): Color {
+    val text = hex?.removePrefix("#") ?: return Color(0xFF7CB342)
+    val value = runCatching { text.toLong(16) }.getOrNull() ?: return Color(0xFF7CB342)
+    return Color(0xFF000000 or value)
 }
 
 /** A day's events under its heading */

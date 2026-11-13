@@ -1035,7 +1035,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     if (backgroundColourOpen) {
-                        BackgroundColourDialog(
+                        ColourPickerDialog(
+                            title = "Background colour",
+                            subtitle = "The launcher keeps its dark surfaces; the colour sits behind them, under the darkness setting.",
+                            palette = BackgroundColours,
                             current = prefs.backgroundColour,
                             onPick = {
                                 prefs.backgroundColour = it
