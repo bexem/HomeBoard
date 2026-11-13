@@ -103,7 +103,7 @@ fun EntityPickerDialog(
                     supportingContent = {
                         // A chosen row is numbered; the rest say what they are, when the caller has a line
                         val line = if (position >= 0 && movesMatter) "${positionLabel(position + 1)} of ${chosen.size}" else row.detail
-                        if (line.isNotEmpty()) Text(line)
+                        if (line.isNotEmpty()) Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     leadingContent = {
                         Checkbox(

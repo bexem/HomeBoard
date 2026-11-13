@@ -573,6 +573,7 @@ fun SensorReading(id: String, entity: HaEntity?, name: String? = null, iconColor
             },
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ListItem
@@ -103,7 +104,7 @@ fun EntityNamesDialog(
                 ListItem(
                     selected = false,
                     onClick = { editing = id; text = shown },
-                    headlineContent = { Text(shown.ifEmpty { haName ?: id.substringAfter('.') }, maxLines = 1) },
+                    headlineContent = { Text(shown.ifEmpty { haName ?: id.substringAfter('.') }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     supportingContent = {
                         Text(
                             when {
@@ -112,6 +113,7 @@ fun EntityNamesDialog(
                                 else -> "$id · Home Assistant: $haName"
                             },
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     },
                     modifier = rows.row(id).ringToTop().focusable()

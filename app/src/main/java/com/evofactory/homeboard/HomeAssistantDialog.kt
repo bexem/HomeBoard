@@ -726,7 +726,7 @@ private fun LazyListScope.entitySection(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text(mark(entity), style = MaterialTheme.typography.bodyMedium)
+                Text(mark(entity), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

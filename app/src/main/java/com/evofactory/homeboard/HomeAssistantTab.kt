@@ -59,7 +59,6 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -1266,15 +1265,15 @@ private fun SelectRow(connection: HaConnection, id: String, name: String?, modif
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                // The row's slack, so the reading and its chevron sit flush at the end: a weighted
+                // name beside a weighted reading split it and left the chevron short of the edge
+                modifier = Modifier.weight(1f),
             )
             Text(
                 entity?.reading ?: "—",
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
             )
             MdiIcon("mdi:menu-down", color = LocalContentColor.current)
         }

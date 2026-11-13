@@ -284,8 +284,8 @@ fun ChecklistDialog(
                     ListItem(
                         selected = false,
                         onClick = { if (checked) unchecked += row.key else unchecked -= row.key },
-                        headlineContent = { Text(row.title) },
-                        supportingContent = { Text(row.subtitle) },
+                        headlineContent = { Text(row.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = { Text(row.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingContent = {
                             Checkbox(
                                 checked = checked,

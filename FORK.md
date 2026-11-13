@@ -1782,3 +1782,25 @@ two controls for one action.
 Launcher → Screensaver → The TV's choice: header holds the action button and the X only, focus ring on
 the X when it opens, the status text with the two ADB commands below. (`screensaver_show_progress`
 checked untouched after a stray OK landed on its toggle row: still true.)
+
+## Rows ellipsize, and the select row loses the header bug's last copy (2026-11-13)
+
+The audit's two mediums. Twelve texts could wrap and grow their row instead of ellipsising — a long
+camera URL in the entity picker, a long label in the context menu, a long stream title. And `SelectRow`
+still had the exact weight pattern that put 230 dp of slack past the dialog X: a
+`weight(1f, fill = false)` name beside a `weight(1f)` reading, so the chevron floated short of the
+row's end. Latent today — no `input_select` entity is chosen on this TV — but it was the last copy.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `EntityPickerDialog.kt`, `CalendarColoursDialog.kt`, `ExportImport.kt`, `EntityNamesDialog.kt`, `ContextMenu.kt`, `CameraDialog.kt`, `HomeAssistantDialog.kt`, `HomeAssistantPanel.kt` | `maxLines = 1, overflow = TextOverflow.Ellipsis` on the twelve texts that could wrap |
+| `HomeAssistantTab.kt` | `SelectRow`: the name takes the row (`weight(1f)`, ellipsising), the reading sits intrinsic before the chevron — flush at the end, like every other row; the now-unused `TextAlign` import is gone |
+
+### Verified on the Shield (2026-11-13, 18:15)
+
+The Assistant tab walked on the new build with no regression: sensors, steppable rows (Stand, LED
+strip), vacuum, alarm and scripts all render and hold focus as before. The select row itself cannot be
+seen until a select entity is chosen — noted honestly; the fix is the same geometry as the verified
+TopDialog header, in the opposite direction.

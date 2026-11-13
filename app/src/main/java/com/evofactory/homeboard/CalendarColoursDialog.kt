@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
@@ -82,8 +83,8 @@ fun CalendarColoursDialog(
                 ListItem(
                     selected = false,
                     onClick = { menuFor = id },
-                    headlineContent = { Text(names[id] ?: id) },
-                    supportingContent = { Text("Colour: $name") },
+                    headlineContent = { Text(names[id] ?: id, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = { Text("Colour: $name", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     leadingContent = {
                         Box(
                             modifier = Modifier

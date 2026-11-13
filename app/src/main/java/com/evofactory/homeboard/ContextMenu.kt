@@ -108,7 +108,7 @@ fun ContextMenu(
                             onDismiss()
                             action.onClick()
                         },
-                        headlineContent = { Text(action.label) },
+                        headlineContent = { Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         modifier = if (index == start) Modifier.focusRequester(firstItem) else Modifier,
                     )
                 }
