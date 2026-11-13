@@ -1105,6 +1105,11 @@ class MainActivity : ComponentActivity() {
                                 favourites = prefs.favouriteApps
                                 hidePhoneApps = prefs.hidePhoneApps
                                 homeSensors = prefs.homeSensors
+                                // The session's own seed is rolled already; these say how to use it
+                                shuffleCamera = prefs.shuffleCamera
+                                shuffleActions = prefs.shuffleActions
+                                shuffleCards = prefs.shuffleCards
+                                shuffleSides = prefs.shuffleSides
                                 cameraSource = prefs.cameraSource
                                 cameraSide = prefs.cameraSide
                                 // Where Home starts is a selection, not a value the row can leave alone
@@ -1204,6 +1209,10 @@ class MainActivity : ComponentActivity() {
             favourites = prefs.favouriteApps
             hidePhoneApps = prefs.hidePhoneApps
             homeSensors = prefs.homeSensors
+            shuffleCamera = prefs.shuffleCamera
+            shuffleActions = prefs.shuffleActions
+            shuffleCards = prefs.shuffleCards
+            shuffleSides = prefs.shuffleSides
             channelKeys = prefs.channelKeys
             cameraSource = prefs.cameraSource
             cameraSide = prefs.cameraSide

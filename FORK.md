@@ -1051,3 +1051,34 @@ on restart and on export→import; and `onAspect` overwrote any shape with whate
   on it, and `aspect` was still `1` seconds later — the stream no longer overwrites a chosen shape.
 - Cycled back round to **Auto** (`aspect=0`), force-stopped and reopened: the first frame stored
   `aspect=1.3333333730697632` again and the box went back to **4:3**, which is the value it started with.
+
+## F2 — the shuffle switches apply without a restart (2026-11-13)
+
+H2. `SettingsPage` calls `onSettingsChanged` on every write, but the re-read block updated every rendered
+pref except the four shuffle switches, so flipping one wrote the pref, moved the switch, and changed
+nothing on screen until the app restarted; `applyImport` missed the same four, so an imported shuffle
+setup also waited.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `MainActivity.kt` | `shuffleCamera`, `shuffleActions`, `shuffleCards`, `shuffleSides` re-read in both `onSettingsChanged` and `applyImport` |
+
+### Deliberate designs worth keeping
+
+- **The seed is not re-rolled by a switch.** The session's order was rolled at start; these four only say
+  how to use it, so a switch flipped mid-evening applies to this session's order, not a fresh one. The rows
+  already read "each session".
+- **Every rendered pref belongs in both re-read blocks.** This is the third bug of that shape (H2 here,
+  H4/F4, and M10's three camera rows); the rule is in the plan's §2 and now holds for the shuffle block too.
+
+### Verified on the Shield (2026-11-13, 10:40–10:41)
+
+- With shuffle off, Home showed the **doorbell**. OK on Home → *Shuffle the camera* (no restart, no back):
+  `Player e15f started over TCP, …, /living_room` at 10:40:05 and the picture became the living room.
+- OK on *Swap the camera and widgets* re-laid the Home tab at once (the camera box resized to the new
+  camera's shape in the same frame pass); the sides flag is a per-session roll, so the order it lands on is
+  not itself proof — the re-layout is.
+- Both switched off again: `Player 77c3 started …, /doorbell` at 10:41:16 and the picture went back.
+  `shuffle_camera`, `shuffle_actions`, `shuffle_cards`, `shuffle_sides` all read `false`, as Ema has them.
