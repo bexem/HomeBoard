@@ -64,6 +64,8 @@ private const val FIRST_SLOT_UNDER_PANEL = 3
 
 class MainActivity : ComponentActivity() {
     private val prefs by lazy { LauncherPrefs(this) }
+    // For the few places inside the settings lambdas that need a Context of their own
+    private val appContext get() = this
     private var installed by mutableStateOf<List<InstalledApp>?>(null)
     private var order by mutableStateOf(emptyList<String>())
     private var hidden by mutableStateOf(emptyList<String>())
@@ -101,6 +103,8 @@ class MainActivity : ComponentActivity() {
     // The dot on the Alerts tab, and the count beside the clock, both from the same read
     private var alertsDot by mutableStateOf(true)
     private var notificationsOpen by mutableStateOf(false)
+    // The grant's own status screen, which is what "Access" means once it is granted
+    private var notificationGrantOpen by mutableStateOf(false)
     private var screensaverOpen by mutableStateOf(false)
     private var entityNamesOpen by mutableStateOf(false)
     private var haAddressOpen by mutableStateOf(false)
@@ -952,6 +956,9 @@ class MainActivity : ComponentActivity() {
                     if (notificationsOpen) {
                         NotificationsDialog(onDismiss = { notificationsOpen = false })
                     }
+                    if (notificationGrantOpen) {
+                        NotificationAccessDialog(onDismiss = { notificationGrantOpen = false })
+                    }
                     if (frigateOpen) {
                         FrigateDialog(
                             initial = frigate,
@@ -1082,6 +1089,14 @@ class MainActivity : ComponentActivity() {
                                 openHomeAssistant = { tab -> haDialogTab = tab ?: HaDialogTab.Home },
                                 openFrigate = { frigateOpen = true },
                                 openNotificationAccess = { notificationsOpen = true },
+                                // The panel when access is off (it says how to grant it), the status when it is on
+                                openNotificationGrant = {
+                                    if (Notifications.granted || Notifications.enabled(appContext)) {
+                                        notificationGrantOpen = true
+                                    } else {
+                                        notificationsOpen = true
+                                    }
+                                },
                                 markAlertsReviewed = {
                                     // Everything there now is looked at, so neither the dot nor the
                                     // count has anything to say

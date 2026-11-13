@@ -35,6 +35,8 @@ class SettingsActions(
     val openFrigate: () -> Unit,
     // The notifications panel, which also says how to grant notification access
     val openNotificationAccess: () -> Unit,
+    // The grant's own status, once it is granted; the panel is where it is asked for while it is off
+    val openNotificationGrant: () -> Unit,
     val openPing: () -> Unit,
     // Clears the Alerts tab's dot and the top bar's count
     val markAlertsReviewed: () -> Unit,
@@ -60,6 +62,7 @@ class SettingsActions(
         is SettingAction.OpenAssistantTab -> { { openHomeAssistant(action.tab) } }
         SettingAction.OpenFrigate -> openFrigate
         SettingAction.OpenNotificationAccess -> openNotificationAccess
+        SettingAction.OpenNotificationGrant -> openNotificationGrant
         SettingAction.OpenPing -> openPing
         SettingAction.MarkAlertsReviewed -> markAlertsReviewed
         SettingAction.OpenSystemSettings -> openSystemSettings

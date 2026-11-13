@@ -1120,3 +1120,35 @@ that no longer existed in prefs.
 - One drift to record: showing the shuffled camera (F2) taught `cameras` the Living Room's own shape
   (`aspect=1.7777…`), which the baseline had as 0 (Auto). Same picture, and it is the learning F1 puts
   back; left as learned rather than reset through five more remote presses.
+
+## F5 — both notification rows, each honest (2026-11-13)
+
+H5 and W4, decided by Ema: **keep both rows**. Both mapped to the same panel, so "Access" opened a list of
+notifications, which its title does not promise; with access off, both led to the same instruction screen
+(that part was right).
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `SettingsSchema.kt` | New `SettingAction.OpenNotificationGrant`; the **Access** row carries it, **Notifications panel** keeps `OpenNotificationAccess` |
+| `SettingsMenuDialog.kt` | `SettingsActions.openNotificationGrant`, mapped to the new action |
+| `NotificationsDialog.kt` | `NotificationAccessDialog`: the granted state in one line, and the `disallow_listener` command that takes it back — the panel's off state prints the allow counterpart, so the two screens read as one subject from both sides |
+| `MainActivity.kt` | The action mapping decides: access on → the status screen; access off → the panel, which is where the grant is explained |
+
+### Deliberate designs worth keeping
+
+- **Neither row is a second door to the same screen.** Each says what it holds — "Allowed" / "8 showing" —
+  before you press it, and each opens exactly that.
+- **The mapping lives in `MainActivity`**, because whether access is granted is the app's state, not the
+  schema's.
+
+### Verified on the Shield (2026-11-13, 10:58)
+
+- Advanced → Notifications read **Access · Allowed** and **Notifications panel · 8 showing** (access is
+  granted on this Shield, as M9 left it).
+- OK on **Access** opened "Notification access": "Allowed: HomeBoard reads the TV's notifications and lists
+  them under Notifications panel", with the `adb shell cmd notification disallow_listener …` command and
+  Close — not the list.
+- OK on **Notifications panel** opened the list (QuickBars, SHIELD Experience Upgrade, tvQuickActions ×2,
+  Shield SMB Server, DolbyAudioService, Android TV Remote Service). Nothing was cleared.

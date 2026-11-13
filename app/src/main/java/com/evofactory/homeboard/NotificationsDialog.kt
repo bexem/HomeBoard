@@ -184,3 +184,37 @@ private fun NotificationAccessOff() {
         )
     }
 }
+
+/**
+ * What "Access" means once it is granted: the state, and the command that takes it back. The panel's
+ * off state prints the allow counterpart, so the two screens read as one subject from both sides.
+ */
+@Composable
+fun NotificationAccessDialog(onDismiss: () -> Unit) {
+    val close = remember { FocusRequester() }
+    TopDialog(
+        title = "Notification access",
+        width = 720.dp,
+        onDismiss = onDismiss,
+        buttons = listOf(DialogButton("Close", primary = true, focus = close, onClick = onDismiss)),
+        contentFocus = { close },
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
+            Text(
+                "Allowed: HomeBoard reads the TV's notifications and lists them under Notifications panel.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "To take it back, from a computer on the same network:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                "adb shell cmd notification disallow_listener\ncom.evofactory.homeboard/.LauncherNotificationListener",
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}

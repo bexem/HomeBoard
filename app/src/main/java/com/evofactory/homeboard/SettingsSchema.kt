@@ -70,6 +70,9 @@ sealed interface SettingAction {
 
     /** The notifications overlay, which says how to grant notification access when it is off */
     data object OpenNotificationAccess : SettingAction
+
+    /** What notification access means once it is granted: the status screen, not the list again */
+    data object OpenNotificationGrant : SettingAction
     data object OpenPing : SettingAction
     data object OpenSystemSettings : SettingAction
     data object ExportSettings : SettingAction
@@ -724,7 +727,7 @@ val AllSettings: List<SettingDef> = listOf(
         "Notifications",
         "Access",
         "Android only shares the TV's notifications with an app that is allowed to read them",
-        SettingAction.OpenNotificationAccess,
+        SettingAction.OpenNotificationGrant,
     ),
     action(
         "notifications",
