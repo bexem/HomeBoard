@@ -14,6 +14,10 @@ import androidx.tv.material3.darkColorScheme
 /** A switch that's on, a filled button, a slider: the blue of the remote's blue button */
 val SwitchOn = Color(0xFF5A8FD9)
 
+/** The muted pair a tick box, a quiet switch track and an idle dot all share: on, and off */
+internal val MarkOn = Color(0xFF5A595F)
+internal val MarkOff = Color(0xFF8E8C92)
+
 val AppColorScheme = darkColorScheme(
     // Filled buttons and sliders take the blue: left at the library's default a filled button read
     // as disabled next to the outlined ones

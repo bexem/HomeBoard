@@ -1117,7 +1117,6 @@ class MainActivity : ComponentActivity() {
                                 homeOverrideChanged()
                             },
                             onDismiss = { settingsOpen = false },
-                            onOpenAccessibility = { openAccessibilitySettings() },
                         )
                     }
                     if (stuckPlayersOpen) {

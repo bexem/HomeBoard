@@ -123,11 +123,11 @@ fun HomeOption(title: String, description: String, checked: Boolean, onClick: ()
                 // Neutral: reads on the dialog and on the light background of the selected row
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = SwitchOnTrack,
-                    checkedBorderColor = SwitchOnTrack,
-                    uncheckedThumbColor = SwitchOff,
+                    checkedTrackColor = MarkOn,
+                    checkedBorderColor = MarkOn,
+                    uncheckedThumbColor = MarkOff,
                     uncheckedTrackColor = Color.Transparent,
-                    uncheckedBorderColor = SwitchOff,
+                    uncheckedBorderColor = MarkOff,
                 ),
             )
         },
@@ -136,5 +136,3 @@ fun HomeOption(title: String, description: String, checked: Boolean, onClick: ()
 }
 
 private const val HELPER_START_GRACE_MS = 3_000L
-private val SwitchOnTrack = Color(0xFF5A595F)
-private val SwitchOff = Color(0xFF8E8C92)

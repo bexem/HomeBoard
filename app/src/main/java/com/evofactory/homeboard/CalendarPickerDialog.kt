@@ -129,8 +129,8 @@ fun CalendarPickerDialog(
                             checked = isPicked,
                             onCheckedChange = null,
                             colors = CheckboxDefaults.colors(
-                                checkedColor = CalendarPickedBox,
-                                uncheckedColor = CalendarEmptyBox,
+                                checkedColor = MarkOn,
+                                uncheckedColor = MarkOff,
                             ),
                         )
                     },
@@ -175,6 +175,3 @@ fun CalendarPickerDialog(
         }
     }
 }
-
-private val CalendarPickedBox = androidx.compose.ui.graphics.Color(0xFF5A595F)
-private val CalendarEmptyBox = androidx.compose.ui.graphics.Color(0xFF8E8C92)

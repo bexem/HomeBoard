@@ -45,7 +45,7 @@ fun HomeHelperDialog(prefs: LauncherPrefs, onOpenAccessibility: () -> Unit, onTu
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
                     Modifier.size(9.dp).background(
-                        if (running) HelperRunningColor else HelperIdleColor,
+                        if (running) HelperRunningColor else MarkOff,
                         CircleShape,
                     ),
                 )

@@ -291,8 +291,8 @@ fun ChecklistDialog(
                                 checked = checked,
                                 onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = CheckedBox,
-                                    uncheckedColor = UncheckedBox,
+                                    checkedColor = MarkOn,
+                                    uncheckedColor = MarkOff,
                                     checkmarkColor = Color.White,
                                 ),
                             )
@@ -306,9 +306,6 @@ fun ChecklistDialog(
         LaunchedEffect(Unit) { runCatching { (if (allKeys.isEmpty()) cancel else confirm).requestFocus() } }
     }
 }
-
-private val CheckedBox = Color(0xFF5A595F)
-private val UncheckedBox = Color(0xFF8E8C92)
 
 /** To another TV on the network, or to a file. */
 @Composable

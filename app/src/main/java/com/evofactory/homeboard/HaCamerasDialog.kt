@@ -28,11 +28,9 @@ import androidx.tv.material3.Text
 
 /**
  * Which Home Assistant cameras the launcher shows when the pictures come from Home Assistant, and in
- * what order. The list is read when the dialog opens, so a camera added there needs no rebuild.
- *
- * The list is read from Home Assistant when the dialog opens, not kept in the app: a calendar added
- * there appears here with no rebuild. OK chooses; left and right on a chosen calendar move it along,
- * so the order here is the order the card reads.
+ * what order. The list is read from Home Assistant when the dialog opens, not kept in the app: a
+ * camera added there appears here with no rebuild. OK chooses; left and right on a chosen camera move
+ * it along, so the order here is the order the card reads.
  */
 @Composable
 fun HaCamerasDialog(
@@ -43,7 +41,7 @@ fun HaCamerasDialog(
 ) {
     var picked by remember { mutableStateOf(chosen) }
     val pickedIds = remember(picked) { picked.map { it.entityId } }
-    // Every calendar the server reports, by id: what can be picked
+    // Every camera the server reports, by id: what can be picked
     var found by remember { mutableStateOf<List<HaEntity>?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
     val rows = remember { ListFocus() }
@@ -137,13 +135,13 @@ fun HaCamerasDialog(
                             checked = isPicked,
                             onCheckedChange = null,
                             colors = CheckboxDefaults.colors(
-                                checkedColor = CameraPickedBox,
-                                uncheckedColor = CameraEmptyBox,
+                                checkedColor = MarkOn,
+                                uncheckedColor = MarkOff,
                             ),
                         )
                     },
                     modifier = rows.row(camera.id).onPreviewKeyEvent { event ->
-                        // Left and right move a chosen calendar; anything else is the list's own
+                        // Left and right move a chosen camera; anything else is the list's own
                         if (!isPicked || event.type != KeyEventType.KeyDown) {
                             false
                         } else {
@@ -160,6 +158,3 @@ fun HaCamerasDialog(
         LaunchedEffect(keys) { runCatching { (rows.currentOrNull(keys) ?: done).requestFocus() } }
     }
 }
-
-private val CameraPickedBox = androidx.compose.ui.graphics.Color(0xFF5A595F)
-private val CameraEmptyBox = androidx.compose.ui.graphics.Color(0xFF8E8C92)

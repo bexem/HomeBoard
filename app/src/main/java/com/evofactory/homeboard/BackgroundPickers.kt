@@ -15,15 +15,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -50,7 +46,6 @@ fun BackgroundColourDialog(current: Int, onPick: (Int) -> Unit, onDismiss: () ->
     ) {
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
             items(BackgroundColours, key = { it.first }) { (name, value) ->
-                var focused by remember { mutableStateOf(false) }
                 ListItem(
                     selected = false,
                     onClick = { onPick(value); onDismiss() },
@@ -70,7 +65,7 @@ fun BackgroundColourDialog(current: Int, onPick: (Int) -> Unit, onDismiss: () ->
                     supportingContent = {
                         if (value == current) Text("In use") else null
                     },
-                    modifier = rows.row(name).onFocusChanged { focused = it.isFocused },
+                    modifier = rows.row(name),
                 )
             }
         }

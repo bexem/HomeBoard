@@ -70,7 +70,6 @@ fun SettingsPage(
     revision: Int,
     onSettingsChanged: () -> Unit,
     onDismiss: () -> Unit,
-    onOpenAccessibility: () -> Unit,
 ) {
     var section by remember { mutableStateOf(SettingSection.Home) }
     var showingAbout by remember { mutableStateOf(false) }
@@ -155,7 +154,6 @@ fun SettingsPage(
                         version = version,
                         rows = rows,
                         first = contentFirst,
-                        onOpenAccessibility = onOpenAccessibility,
                         toRail = rail(section),
                         toSearch = search,
                         onWrite = { writes++; onSettingsChanged() },
@@ -360,7 +358,6 @@ private fun SectionPage(
     version: Int,
     rows: ListFocus,
     first: FocusRequester,
-    onOpenAccessibility: () -> Unit,
     toRail: FocusRequester,
     toSearch: FocusRequester,
     onWrite: () -> Unit,
@@ -580,8 +577,6 @@ private fun rowSummary(setting: SettingDef, prefs: LauncherPrefs): String {
     }
     return when (setting.key) {
         "cameras" -> if (prefs.cameras.isEmpty()) "None yet" else "${prefs.cameras.size} cameras"
-        // A server's own door says whether it is set up, and where
-        "home_assistant" -> prefs.haUrl.ifEmpty { "Not set up" }
         "frigate" -> prefs.frigate.url.ifEmpty { "Not set up" }
         "assistant_display", "home_display" -> {
             // Null is the chosen entities; "" is Home Assistant's default dashboard, "Overview"

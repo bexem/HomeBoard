@@ -48,9 +48,6 @@ sealed interface SettingAction {
     data object OpenHaCameras : SettingAction
     data object OpenCalendarColours : SettingAction
 
-    /** The Home Assistant dialog, where it starts: the connection, or what it already holds */
-    data object OpenHomeAssistant : SettingAction
-
     /** The Home Assistant dialog, opened on one of its tabs */
     data class OpenAssistantTab(val tab: HaDialogTab) : SettingAction
 

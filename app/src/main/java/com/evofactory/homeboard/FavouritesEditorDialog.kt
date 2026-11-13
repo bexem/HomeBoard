@@ -98,7 +98,7 @@ fun FavouritesEditorDialog(
                         Checkbox(
                             checked = isPinned,
                             onCheckedChange = null,
-                            colors = CheckboxDefaults.colors(checkedColor = PinnedBox, uncheckedColor = UnpinnedBox),
+                            colors = CheckboxDefaults.colors(checkedColor = MarkOn, uncheckedColor = MarkOff),
                         )
                     },
                     modifier = rows.row(app.key).onPreviewKeyEvent { event ->
@@ -119,6 +119,3 @@ fun FavouritesEditorDialog(
         LaunchedEffect(Unit) { runCatching { (rows.currentOrNull(keys) ?: done).requestFocus() } }
     }
 }
-
-private val PinnedBox = androidx.compose.ui.graphics.Color(0xFF5A595F)
-private val UnpinnedBox = androidx.compose.ui.graphics.Color(0xFF8E8C92)
