@@ -224,6 +224,11 @@ class LauncherPrefs(context: Context) {
         set(value) = prefs.edit { putInt("screensaver_seconds", value) }
 
     /** Ids of the cameras the screensaver leaves out; new cameras show */
+    /** The same seconds, as the choice value a schema row needs: "15" */
+    var screensaverSecondsChoice: String
+        get() = screensaverSeconds.toString()
+        set(value) { value.toIntOrNull()?.let { screensaverSeconds = it } }
+
     var screensaverHiddenCameras: List<String>
         get() = readList("screensaver_hidden_cameras")
         set(value) = writeList("screensaver_hidden_cameras", value)

@@ -24,7 +24,8 @@ class SettingsActions(
     val openCalendarColours: () -> Unit,
     val openHaCameras: () -> Unit,
     val openCameras: () -> Unit,
-    val openScreensaver: () -> Unit,
+    val openScreensaverCameras: () -> Unit,
+    val openScreensaverStatus: () -> Unit,
     val openEntityNames: () -> Unit,
     val openHaAddress: () -> Unit,
     val logOutHomeAssistant: () -> Unit,
@@ -54,7 +55,8 @@ class SettingsActions(
         SettingAction.OpenCalendarColours -> openCalendarColours
         SettingAction.OpenHaCameras -> openHaCameras
         SettingAction.OpenCameras -> openCameras
-        SettingAction.OpenScreensaver -> openScreensaver
+        SettingAction.OpenScreensaverCameras -> openScreensaverCameras
+        SettingAction.OpenScreensaverStatus -> openScreensaverStatus
         SettingAction.OpenEntityNames -> openEntityNames
         SettingAction.OpenHaAddress -> openHaAddress
         SettingAction.LogOutHomeAssistant -> logOutHomeAssistant

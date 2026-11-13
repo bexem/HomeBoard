@@ -111,7 +111,8 @@ class MainActivity : ComponentActivity() {
     private var notificationsOpen by mutableStateOf(false)
     // The grant's own status screen, which is what "Access" means once it is granted
     private var notificationGrantOpen by mutableStateOf(false)
-    private var screensaverOpen by mutableStateOf(false)
+    private var screensaverCamerasOpen by mutableStateOf(false)
+    private var screensaverStatusOpen by mutableStateOf(false)
     private var entityNamesOpen by mutableStateOf(false)
     private var haAddressOpen by mutableStateOf(false)
     private var haServicesOpen by mutableStateOf(false)
@@ -992,8 +993,16 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { entityNamesOpen = false },
                         )
                     }
-                    if (screensaverOpen) {
-                        ScreensaverDialog(prefs = prefs, cameras = cams, onDismiss = { screensaverOpen = false })
+                    if (screensaverCamerasOpen) {
+                        ScreensaverCamerasDialog(
+                            cameras = cameras,
+                            hidden = prefs.screensaverHiddenCameras,
+                            onChange = { prefs.screensaverHiddenCameras = it; settingsRevision++ },
+                            onDismiss = { screensaverCamerasOpen = false },
+                        )
+                    }
+                    if (screensaverStatusOpen) {
+                        ScreensaverStatusDialog(onDismiss = { screensaverStatusOpen = false })
                     }
                     if (notificationsOpen) {
                         NotificationsDialog(onDismiss = { notificationsOpen = false })
@@ -1129,7 +1138,8 @@ class MainActivity : ComponentActivity() {
                                 openCalendarColours = { calendarColoursOpen = true },
                                 openHaCameras = { haCamerasOpen = true },
                                 openCameras = { camerasOpen = true },
-                                openScreensaver = { screensaverOpen = true },
+                                openScreensaverCameras = { screensaverCamerasOpen = true },
+                                openScreensaverStatus = { screensaverStatusOpen = true },
                                 openEntityNames = { entityNamesOpen = true },
                                 openHaAddress = { haAddressOpen = true },
                                 logOutHomeAssistant = { logoutConfirm = true },

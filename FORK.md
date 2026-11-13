@@ -1606,3 +1606,41 @@ Ema: "'Wider widgets' is nice but I think you gave too much room to the widgets,
 - Choosing **Widgets: twice as wide** (`camera_side=double`) made the calendar panel ~846 px wide against
   the camera's 605, from 260 dp before (screenshot), with no restart.
 - Restored to **Centre the picture** (`camera_side=centre`), the value found on the TV.
+
+## The screensaver's settings are rows on the page (2026-11-13)
+
+Ema: "Why does the screensaver settings be a popup?" It was `ScreensaverDialog`, one door holding a choice,
+a toggle, a per-camera chip list and the Android-choice status. M12 had to put it in a dialog because the
+page could render only scalar rows from the static schema, had no way to express a dynamic list, and had no
+pattern for a status block. All three blockers are gone (C4's picker, C1's page work, F5's status screen),
+so it is four rows now.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `SettingsSchema.kt` | Launcher → Screensaver is four rows: **Time on each camera** (Choice), **Cameras it shows** (List → picker), **Connection progress** (Toggle), **The TV's choice** (Action). `OpenScreensaver` replaced by `OpenScreensaverCameras` and `OpenScreensaverStatus` |
+| `LauncherPrefs.kt` | `screensaverSecondsChoice`: the same `screensaver_seconds` key read as a choice value, so the row and the service cannot disagree |
+| `Screensaver.kt` | `ScreensaverDialog` and `ScreensaverSettings` deleted. Two screens take their place: `ScreensaverCamerasDialog` (the shared picker over the camera list, chosen = shown, `onChange` writes the hidden list) and `ScreensaverStatusDialog` (whose screensaver the TV starts, when, and the two ADB commands when it isn't ours) |
+| `EntityPickerDialog.kt` | `movesMatter: Boolean = true`: false hides the move entries, the position line and left/right, for a list where order means nothing (the screensaver's cameras play in the Cameras list's order) |
+| `SettingsPage.kt` | `screensaver_cameras` reads "All 6 cameras" / "4 of 6" — the stored list is what is *left out*, so the generic "N chosen" would read the opposite |
+| `SettingsMenuDialog.kt`, `MainActivity.kt` | The two hooks and their dialogs; the `screensaver` door and its state are gone |
+
+### Deliberate designs worth keeping
+
+- **One storage key, one writer.** The Choice row writes the same Int key the DreamService reads; the dialog
+  that used to write it is deleted, so there is no second editor (M8's rule).
+- **Order means nothing, so the picker says nothing about order** — the shared picker learns one flag rather
+  than growing a fifth sibling.
+- **A status is a screen, not a paragraph in a dialog** (F5's pattern), and the command it prints is the one
+  an admin can paste.
+
+### Verified on the Shield (2026-11-13, 15:50–15:55)
+
+- Launcher → Screensaver reads **Time on each camera · 15 s**, **Cameras it shows · All 6 cameras**,
+  **Connection progress** (off), **The TV's choice** (screenshot). The "How it plays" door is gone.
+- OK on **The TV's choice** opened "The TV's screensaver": *"The TV's screensaver is turned off."* plus both
+  `adb shell settings put secure …` commands, and its button opened the TV's own Screen saver chooser with
+  **HomeBoard Cameras** listed. Nothing was chosen there and the TV's setting was left as it was.
+- Not opened on the TV: the cameras picker itself (the row and its summary were seen; the picker is C4's,
+  with the no-order flag). It is the first thing to press next.

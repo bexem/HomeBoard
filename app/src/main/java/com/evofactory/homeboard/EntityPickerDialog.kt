@@ -52,6 +52,8 @@ fun EntityPickerDialog(
     excludeLabel: String,
     /** A chosen thing's place in the list, 1-based: "Priority 2", "Position 3" */
     positionLabel: (Int) -> String,
+    // Whether order means anything here: false hides the move entries, the position line and left/right
+    movesMatter: Boolean = true,
     /** Nothing chosen, and the line for a list with nothing in it */
     emptyText: String,
     /** The subtitle from two chosen up: what the count means and what the keys do */
@@ -100,7 +102,7 @@ fun EntityPickerDialog(
                     },
                     supportingContent = {
                         // A chosen row is numbered; the rest say what they are, when the caller has a line
-                        val line = if (position >= 0) "${positionLabel(position + 1)} of ${chosen.size}" else row.detail
+                        val line = if (position >= 0 && movesMatter) "${positionLabel(position + 1)} of ${chosen.size}" else row.detail
                         if (line.isNotEmpty()) Text(line)
                     },
                     leadingContent = {
@@ -114,8 +116,9 @@ fun EntityPickerDialog(
                         )
                     },
                     modifier = focus.row(row.id).onPreviewKeyEvent { event ->
-                        // Left and right move a chosen row; anything else is the list's own
-                        if (!isChosen || event.type != KeyEventType.KeyDown) {
+                        // Left and right move a chosen row; anything else is the list's own. Where order
+                        // means nothing they are left to the list, so focus still leaves sideways
+                        if (!isChosen || !movesMatter || event.type != KeyEventType.KeyDown) {
                             false
                         } else {
                             when (event.key) {
@@ -144,7 +147,7 @@ fun EntityPickerDialog(
                     )
                     if (isChosen) {
                         if (position > 0) {
-                            add(MenuAction("Move up (${positionLabel(position)})") { move(id, -1); menuFor = null })
+                            if (movesMatter) add(MenuAction("Move up (${positionLabel(position)})") { move(id, -1); menuFor = null })
                         }
                         if (position < chosen.lastIndex) {
                             add(MenuAction("Move down (${positionLabel(position + 2)})") { move(id, 1); menuFor = null })

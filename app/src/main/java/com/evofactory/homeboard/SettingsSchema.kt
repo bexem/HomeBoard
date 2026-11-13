@@ -39,8 +39,11 @@ enum class SettingSection(val label: String) {
 sealed interface SettingAction {
     data object OpenCameras : SettingAction
 
-    /** The screensaver's own dialog: the cameras one after the other */
-    data object OpenScreensaver : SettingAction
+    /** Which cameras the screensaver shows */
+    data object OpenScreensaverCameras : SettingAction
+
+    /** What the TV does when it is left alone: the screensaver's own status screen */
+    data object OpenScreensaverStatus : SettingAction
     data object OpenFavourites : SettingAction
     data object OpenCalendars : SettingAction
     data object OpenBackgroundColour : SettingAction
@@ -268,13 +271,39 @@ val AllSettings: List<SettingDef> = listOf(
         "What makes the Home button open this launcher on a TV that keeps its own home screen",
         SettingAction.OpenHomeHelper,
     ),
-    action(
-        "screensaver",
+    choice(
+        "screensaver_seconds",
         SettingSection.Launcher,
         "Screensaver",
-        "How it plays",
-        "The cameras one after the other, how long each stays, and which ones show",
-        SettingAction.OpenScreensaver,
+        "Time on each camera",
+        "Counted from each camera's first picture, then the next one",
+        LauncherPrefs::screensaverSecondsChoice,
+        SCREENSAVER_SECONDS.map { it.toString() to formatSeconds(it) },
+    ),
+    list(
+        "screensaver_cameras",
+        SettingSection.Launcher,
+        "Screensaver",
+        "Cameras it shows",
+        "Which cameras take a turn; the ones left out never appear",
+        LauncherPrefs::screensaverHiddenCameras,
+        SettingAction.OpenScreensaverCameras,
+    ),
+    toggle(
+        "screensaver_progress",
+        SettingSection.Launcher,
+        "Screensaver",
+        "Connection progress",
+        "While a camera connects. Off: only a problem shows, e.g. a camera that doesn't answer",
+        LauncherPrefs::screensaverShowProgress,
+    ),
+    action(
+        "screensaver_status",
+        SettingSection.Launcher,
+        "Screensaver",
+        "The TV's choice",
+        "Whether this TV starts HomeBoard when it is left alone, and what to do if it doesn't",
+        SettingAction.OpenScreensaverStatus,
     ),
     toggle(
         "reopen_after_home",

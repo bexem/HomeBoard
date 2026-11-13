@@ -12,6 +12,7 @@ import android.service.dreams.DreamService
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -273,147 +274,96 @@ fun Context.openScreensaverSettings() {
  * The screensaver's own dialog: it is the launcher's, not a camera's, so its row lives in the Launcher
  * category instead of being a tab inside the camera one.
  */
+/**
+ * Which cameras the screensaver shows, chosen from the camera list: order means nothing here (it is the
+ * Cameras list's order that plays), so the picker offers no moves.
+ */
 @Composable
-fun ScreensaverDialog(prefs: LauncherPrefs, cameras: List<Camera>, onDismiss: () -> Unit) {
-    val rows = remember { ListFocus() }
-    var seconds by remember { mutableStateOf(prefs.screensaverSeconds) }
-    var showProgress by remember { mutableStateOf(prefs.screensaverShowProgress) }
-    var hidden by remember { mutableStateOf(prefs.screensaverHiddenCameras) }
-    val firstCamera = cameras.firstOrNull()?.let { rows.requester("screensaver:${it.id}") }
-    TopDialog(
-        title = "Screensaver",
+fun ScreensaverCamerasDialog(
+    cameras: List<Camera>,
+    hidden: List<String>,
+    onChange: (List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val shown = cameras.filter { it.id !in hidden }.map { it.id }
+    EntityPickerDialog(
+        title = "Cameras in the screensaver",
+        noun = "camera",
+        rows = cameras.map { PickerRow(it.id, it.name, it.url) },
+        chosen = shown,
+        includeLabel = "Include it",
+        excludeLabel = "Leave it out",
+        positionLabel = { "Position $it" },
+        movesMatter = false,
+        emptyText = "No cameras yet: add them under Cameras first.",
+        subtitle = { count -> "$count of ${cameras.size} take a turn" },
+        onChange = { chosen -> onChange(cameras.map { it.id } - chosen.toSet()) },
         onDismiss = onDismiss,
-        subtitle = "The cameras one after the other, once this TV's screensaver settings choose HomeBoard",
-        buttons = listOf(
-            DialogButton("TV screensaver settings", focus = rows.requester("tv"), onClick = {
-                val context = HomeBoardApp.instance
-                if (context.screensaverScreen() != null) context.openScreensaverSettings() else context.openSystemSettings()
-            }),
-            DialogButton("Done", primary = true, onClick = onDismiss),
-        ),
-        contentFocus = { rows.currentOrNull(listOf("shorter", "longer") + cameras.map { "screensaver:${it.id}" } + "progress") ?: rows.requester("tv") },
-    ) {
-        ScreensaverSettings(
-            seconds = seconds,
-            onSecondsChange = { seconds = it; prefs.screensaverSeconds = it },
-            showProgress = showProgress,
-            onShowProgressChange = { showProgress = it; prefs.screensaverShowProgress = it },
-            firstModifier = rows.row("shorter").ringToTop(right = false).focusProperties { firstCamera?.let { down = it } },
-            lastModifier = rows.row("longer").ringToTop(left = false).focusProperties { firstCamera?.let { down = it } },
-            progressModifier = rows.row("progress").ringToTop(),
-            cameras = cameras,
-            hiddenCameras = hidden,
-            onHiddenCamerasChange = { hidden = it; prefs.screensaverHiddenCameras = it },
-            cameraModifier = { index -> rows.row("screensaver:${cameras[index].id}").ringToTop(left = index == 0, right = index == cameras.lastIndex) },
-        )
-    }
+    )
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
+/**
+ * What this TV does when it is left alone: whose screensaver it starts, when, and — when it isn't ours —
+ * the two commands that make it ours, so the page does not need a dialog to say it.
+ */
 @Composable
-fun ScreensaverSettings(
-    seconds: Int,
-    onSecondsChange: (Int) -> Unit,
-    showProgress: Boolean,
-    onShowProgressChange: (Boolean) -> Unit,
-    cameras: List<Camera>,
-    hiddenCameras: List<String>,
-    onHiddenCamerasChange: (List<String>) -> Unit,
-    firstModifier: Modifier,
-    lastModifier: Modifier,
-    progressModifier: Modifier,
-    // For each camera's switch, by its index
-    cameraModifier: (Int) -> Modifier,
-) {
+fun ScreensaverStatusDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val status = rememberScreensaverStatus()
     val ours = remember { ComponentName(context, CameraScreensaver::class.java) }
     val hasScreen = remember { context.screensaverScreen() != null }
     val googleTv = remember { context.isGoogleTvSettings() }
-    val step = SCREENSAVER_SECONDS.indexOf(seconds).takeIf { it >= 0 } ?: SCREENSAVER_SECONDS.indexOf(SCREENSAVER_SECONDS_DEFAULT)
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 12.dp, end = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Time on each camera", style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = { onSecondsChange(SCREENSAVER_SECONDS[(step - 1).coerceAtLeast(0)]) }, modifier = firstModifier) { Text("−") }
-        Text(formatSeconds(seconds), style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = { onSecondsChange(SCREENSAVER_SECONDS[(step + 1).coerceAtMost(SCREENSAVER_SECONDS.lastIndex)]) }, modifier = lastModifier) {
-            Text("+")
-        }
-    }
-    Text(
-        "Counted from each camera's first picture. The cameras below show in the list's order, without sound.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 4.dp, end = 12.dp),
-    )
-    // Side by side: a list of switches wouldn't leave room for the rest
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 12.dp, end = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        cameras.forEachIndexed { index, camera ->
-            val shown = camera.id !in hiddenCameras
-            FilterChip(
-                selected = shown,
-                onClick = { onHiddenCamerasChange(if (shown) hiddenCameras + camera.id else hiddenCameras - camera.id) },
-                leadingIcon = { MdiIcon(if (shown) "mdi:check" else "mdi:close", size = 18.dp, color = LocalContentColor.current) },
-                modifier = cameraModifier(index),
-            ) { Text(camera.name) }
-        }
-    }
-    SwitchRow(
-        title = "Display connection progress",
-        on = showProgress,
-        onToggle = { onShowProgressChange(!showProgress) },
-        modifier = progressModifier.padding(top = 8.dp).fillMaxWidth(),
-        description = "While a camera connects. Off: only a problem shows, e.g. a camera that doesn't answer.",
-    )
-    MenuDivider()
-
     val isOurs = status.chosen == ours
-    val state = when {
-        !status.readable -> "This TV doesn't let apps see which screensaver is chosen."
-        status.enabled == false -> "The TV's screensaver is turned off."
-        isOurs -> "HomeBoard is the TV's screensaver."
-        status.chosen == null -> "The TV has no screensaver chosen."
-        else -> context.screensaverName(status.chosen)?.let { "The TV's screensaver is $it, not HomeBoard." }
-            ?: "The TV's screensaver is set to ${status.chosen.packageName}, which isn't installed."
-    }
-    val startsAfter = status.startsAfterMs?.takeIf { status.enabled != false && it > 0 && it < Int.MAX_VALUE }
-    Text(
-        state + (startsAfter?.let { " It starts after ${formatSeconds(it / 1_000)} without input." } ?: ""),
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
-    )
-    if (status.readable && (!isOurs || status.enabled == false)) {
-        // Some TVs only offer their own screensavers in their settings
-        val commands = listOfNotNull(
-            "adb shell settings put secure $SCREENSAVER_COMPONENTS ${ours.flattenToShortString()}".takeIf { !isOurs },
-            "adb shell settings put secure $SCREENSAVER_ENABLED 1".takeIf { status.enabled == false },
-        )
-        Text(
-            (
-                if (hasScreen) {
-                    "Choose HomeBoard in the TV's screensaver settings, with the button above. If it isn't offered there, a computer can choose it over ADB:\n"
-                } else if (googleTv) {
-                    "Google TV's Settings can't choose another screensaver, but a computer can over ADB:\n"
-                } else {
-                    // e.g. Sony's Android 9: the screen is there, but has no link to it
-                    "Choose HomeBoard in the TV's Settings, with the button above, where it sets the screensaver. If it isn't offered there, a computer can choose it over ADB:\n"
-                }
-                ) + commands.joinToString("\n"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(12.dp),
-        )
-    } else {
-        Spacer(Modifier.padding(6.dp))
+    val close = remember { FocusRequester() }
+    TopDialog(
+        title = "The TV's screensaver",
+        width = 720.dp,
+        onDismiss = onDismiss,
+        buttons = listOfNotNull(
+            DialogButton("TV screensaver settings") {
+                if (context.screensaverScreen() != null) context.openScreensaverSettings() else context.openSystemSettings()
+            },
+            DialogButton("Close", primary = true, focus = close, onClick = onDismiss),
+        ),
+        contentFocus = { close },
+    ) {
+        val state = when {
+            !status.readable -> "This TV doesn't let apps see which screensaver is chosen."
+            status.enabled == false -> "The TV's screensaver is turned off."
+            isOurs -> "HomeBoard is the TV's screensaver."
+            status.chosen == null -> "The TV has no screensaver chosen."
+            else -> context.screensaverName(status.chosen)?.let { "The TV's screensaver is $it, not HomeBoard." }
+                ?: "The TV's screensaver is set to ${status.chosen.packageName}, which isn't installed."
+        }
+        val startsAfter = status.startsAfterMs?.takeIf { status.enabled != false && it > 0 && it < Int.MAX_VALUE }
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(
+                state + (startsAfter?.let { " It starts after ${formatSeconds(it / 1_000)} without input." } ?: ""),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (status.readable && (!isOurs || status.enabled == false)) {
+                // Some TVs only offer their own screensavers in their settings
+                val commands = listOfNotNull(
+                    "adb shell settings put secure $SCREENSAVER_COMPONENTS ${ours.flattenToShortString()}".takeIf { !isOurs },
+                    "adb shell settings put secure $SCREENSAVER_ENABLED 1".takeIf { status.enabled == false },
+                )
+                Text(
+                    (
+                        if (hasScreen) {
+                            "Choose HomeBoard in the TV's screensaver settings, with the button above. If it isn't offered there, a computer can choose it over ADB:\n"
+                        } else if (googleTv) {
+                            "Google TV's Settings can't choose another screensaver, but a computer can over ADB:\n"
+                        } else {
+                            // e.g. Sony's Android 9: the screen is there, but has no link to it
+                            "Choose HomeBoard in the TV's Settings, with the button above, where it sets the screensaver. If it isn't offered there, a computer can choose it over ADB:\n"
+                        }
+                        ) + commands.joinToString("\n"),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+        }
     }
 }
 
@@ -424,7 +374,7 @@ private fun Context.screensaverName(component: ComponentName): String? = try {
     null
 }
 
-private fun formatSeconds(seconds: Int) = when {
+internal fun formatSeconds(seconds: Int) = when {
     seconds < 60 -> "$seconds s"
     seconds % 60 == 0 -> "${seconds / 60} min"
     else -> "${seconds / 60} min ${seconds % 60} s"

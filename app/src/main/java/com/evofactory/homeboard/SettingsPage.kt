@@ -571,6 +571,16 @@ private fun helperSummary(prefs: LauncherPrefs): String = when {
 
 /** What sits behind a door: "6 cameras", "4 chosen", or nothing when there is nothing to say */
 private fun rowSummary(setting: SettingDef, prefs: LauncherPrefs): String {
+    // It stores what is left out, so the generic "N chosen" would read the opposite
+    if (setting.key == "screensaver_cameras") {
+        val left = prefs.screensaverHiddenCameras.size
+        val all = prefs.cameras.size
+        return when {
+            all == 0 -> "No cameras yet"
+            left == 0 -> "All $all cameras"
+            else -> "${all - left} of $all"
+        }
+    }
     if (setting.kind == SettingKind.List) {
         val count = setting.strings?.get(prefs)?.size ?: 0
         return if (count == 0) "None chosen" else "$count chosen"
