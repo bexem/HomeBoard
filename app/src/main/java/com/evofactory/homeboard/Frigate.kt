@@ -25,7 +25,6 @@ import kotlin.math.floor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -105,22 +104,8 @@ class FrigateAlert(
     val cameraName: String get() = camera.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }
 
-/**
- * Address as typed → base URL, e.g. "192.168.1.30" → "https://192.168.1.30:8971": https:// is
- * assumed without a scheme, and Frigate's logged-in port without a port either. Null if invalid.
- */
-fun normalizeFrigateUrl(input: String): String? {
-    val text = input.trim()
-    if (text.isEmpty()) return null
-    val withScheme = when {
-        "://" in text -> text
-        ':' in text -> "https://$text"
-        else -> "https://${text.trimEnd('/')}:$FRIGATE_PORT"
-    }
-    // Only the server: anything copied from the browser after it (e.g. /review) goes
-    val url = withScheme.toHttpUrlOrNull() ?: return null
-    return url.newBuilder().encodedPath("/").query(null).fragment(null).build().toString().trimEnd('/')
-}
+/** e.g. "192.168.1.30" → "https://192.168.1.30:8971" */
+fun normalizeFrigateUrl(input: String): String? = normalizeUrl(input, "https", FRIGATE_PORT)
 
 /**
  * Accepts the certificate pinned, or with no pin, any: the first connection is made from the

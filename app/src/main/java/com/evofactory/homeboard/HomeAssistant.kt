@@ -22,7 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.FormBody
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -351,22 +350,8 @@ internal val httpClient by lazy {
         .build()
 }
 
-/**
- * Address as typed → base URL, e.g. "192.168.1.20" → "http://192.168.1.20:8123": http:// is
- * assumed without a scheme, and Home Assistant's port 8123 without a port either. Null if invalid.
- */
-fun normalizeHaUrl(input: String): String? {
-    val text = input.trim()
-    if (text.isEmpty()) return null
-    val withScheme = when {
-        "://" in text -> text
-        ':' in text -> "http://$text"
-        else -> "http://${text.trimEnd('/')}:8123"
-    }
-    // Only the server: anything copied from the browser after it (e.g. /lovelace/0) goes
-    val url = withScheme.toHttpUrlOrNull() ?: return null
-    return url.newBuilder().encodedPath("/").query(null).fragment(null).build().toString().trimEnd('/')
-}
+/** e.g. "192.168.1.20" → "http://192.168.1.20:8123" */
+fun normalizeHaUrl(input: String): String? = normalizeUrl(input, "http", 8123)
 
 /**
  * Connects to the WebSocket API of the Home Assistant at [server], logs in, runs [block], then
