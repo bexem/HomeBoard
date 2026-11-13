@@ -344,6 +344,14 @@ val AllSettings: List<SettingDef> = listOf(
         LauncherPrefs::continueWatching,
     ),
     toggle(
+        "app_row_centre",
+        SettingSection.Home,
+        "Rows",
+        "Centre the row",
+        "When the apps don't reach the screen's edge, the row sits in the middle instead of at the left",
+        LauncherPrefs::appRowCentre,
+    ),
+    toggle(
         "app_row_wrap",
         SettingSection.Home,
         "Apps",

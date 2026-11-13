@@ -252,6 +252,11 @@ class LauncherPrefs(context: Context) {
         set(value) = prefs.edit { putBoolean("continue_watching", value) }
 
     /** Left on the first app goes to the last, and right off the last goes to the first */
+    /** Tiles in the middle when the row does not reach the screen's edge */
+    var appRowCentre: Boolean
+        get() = prefs.getBoolean("app_row_centre", false)
+        set(value) = prefs.edit { putBoolean("app_row_centre", value) }
+
     var appRowWrap: Boolean
         get() = prefs.getBoolean("app_row_wrap", true)
         set(value) = prefs.edit { putBoolean("app_row_wrap", value) }

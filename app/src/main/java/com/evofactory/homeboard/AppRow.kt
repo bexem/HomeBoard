@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -181,6 +182,8 @@ fun AppRow(
     allAppsTile: Boolean,
     // Left on the first tile goes to the last, right off the last goes to the first
     wrapRow: Boolean,
+    // Tiles in the middle when they do not reach the screen's edge
+    centre: Boolean = false,
     showHidden: Boolean,
     onShowHiddenChange: (Boolean) -> Unit,
     onHide: (InstalledApp) -> Unit,
@@ -407,10 +410,15 @@ fun AppRow(
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val tileWidth = tileWidth(maxWidth)
+        // A row that fits is centred when asked for: the same gap at both edges, no scrolling
+        val tileCount = shown.size + (if (showNoAlertsTile) 1 else 0) + (if (allAppsTile) 1 else 0)
+        val contentWidth = tileWidth * tileCount + TileSpacing * (tileCount - 1).coerceAtLeast(0)
+        val centred = centre && contentWidth + EdgePadding * 2 < maxWidth
+        val edge = if (centred) (maxWidth - contentWidth) / 2 else EdgePadding
         // Only scrolls when the selection leaves its slots; at either end of the row the list can't
         // scroll further, so the selection moves towards the edge instead
-        val firstPositionPx = with(LocalDensity.current) { (EdgePadding + (tileWidth + TileSpacing) * FocusSlot).toPx() }
-        val lastPositionPx = with(LocalDensity.current) { (EdgePadding + (tileWidth + TileSpacing) * LastFocusSlot).toPx() }
+        val firstPositionPx = with(LocalDensity.current) { (edge + (tileWidth + TileSpacing) * FocusSlot).toPx() }
+        val lastPositionPx = with(LocalDensity.current) { (edge + (tileWidth + TileSpacing) * LastFocusSlot).toPx() }
         val scrollSpec = remember(firstPositionPx, lastPositionPx) { scrollOutsideOf(firstPositionPx, lastPositionPx) }
 
         CompositionLocalProvider(LocalBringIntoViewSpec provides scrollSpec) {
@@ -422,7 +430,7 @@ fun AppRow(
                     .focusRestorer()
                     .onPreviewKeyEvent(::onRowKey),
                 // Vertical padding leaves room for the focused tile to grow without being clipped
-                contentPadding = PaddingValues(horizontal = EdgePadding, vertical = TileGrowRoom),
+                contentPadding = PaddingValues(horizontal = edge, vertical = TileGrowRoom),
                 horizontalArrangement = Arrangement.spacedBy(TileSpacing),
             ) {
                 if (showNoAlertsTile) {
@@ -433,14 +441,14 @@ fun AppRow(
                             modifier = Modifier
                                 .onFocusChanged { onNoAlertsSelected(it.hasFocus) }
                                 .focusProperties {
-                                    up = upFocus(listState.slotOnScreen(NO_ALERTS_TILE_KEY))
+                                    up = upFocus(if (centred) 0 else listState.slotOnScreen(NO_ALERTS_TILE_KEY))
                                     down = downFocus
                                     left = FocusRequester.Cancel
                                 },
                         )
                     }
                 }
-                items(shown, key = { it.key }) { app ->
+                itemsIndexed(shown, key = { _, app -> app.key }) { position, app ->
                     val requester = focusRequesters.getOrPut(app.key) { FocusRequester() }
                     val moving = app.key == movingKey
                     AppTile(
@@ -471,7 +479,7 @@ fun AppRow(
                                 },
                             )
                             .focusProperties {
-                                up = upFocus(listState.slotOnScreen(app.key))
+                                up = upFocus(if (centred) tilesBeforeApps + position else listState.slotOnScreen(app.key))
                                 down = downFocus
                                 // Past the ends the search would otherwise jump down to the row below
                                 if (app == shown.first() && !showNoAlertsTile) left = FocusRequester.Cancel
@@ -511,7 +519,7 @@ fun AppRow(
                                 }
                                 .focusRequester(requester)
                                 .focusProperties {
-                                    up = upFocus(listState.slotOnScreen(ALL_APPS_TILE_KEY))
+                                    up = upFocus(if (centred) tilesBeforeApps + shown.size else listState.slotOnScreen(ALL_APPS_TILE_KEY))
                                     down = downFocus
                                     left = focusRequesters.getOrPut(shown.last().key) { FocusRequester() }
                                 },

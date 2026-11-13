@@ -1515,3 +1515,32 @@ had.
 - Puts back: `badge=true`, `badge_source=frigate` (the state FORK.md's M10 section records; the badge had
   been left off by an earlier stray press and was restored with a checked host write — file size and key
   count asserted before and after, 68 keys both times).
+
+## The app row can centre itself (2026-11-13)
+
+Ema: "we should offer an option to centre the favourites app row if there are not enough apps to go to the
+edge."
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | `app_row_centre` (new key, default **off**) |
+| `SettingsSchema.kt` | Home → Rows → **Centre the row**: "When the apps don't reach the screen's edge, the row sits in the middle instead of at the left" |
+| `AppRow.kt` | When the tiles fit, the row's padding becomes the even gap at both edges instead of `EdgePadding` on the left only; the tiles' Up targets come from their **index** in a centred row (a row that fits never scrolls, so index is the slot) and from the on-screen slot otherwise |
+| `MainActivity.kt` | The state, read at start and in both re-read blocks; passed to the row |
+
+### Deliberate designs worth keeping
+
+- **Two ways of knowing a tile's slot, because there are two rows.** A scrolling row's slot is measured
+  from the item's offset; a centred row fits on screen, so its index *is* the slot. Using the offset for the
+  centred case sent Up to the tab bar — measured on the TV, not guessed.
+- **Off by default**: an existing TV looks exactly as it did until the switch is pressed.
+
+### Verified on the Shield (2026-11-13, 15:31–15:37)
+
+- Home → Rows shows **Centre the row**; OK turned it on (`app_row_centre=true`) and the five tiles moved to
+  the middle of the screen with even margins (screenshot), from x≈98 to x≈1470 of 1568.
+- **Up from a centred tile** goes to the camera/panel (focus dump `[249,176]…`), the same as with the row
+  left-aligned — the first attempt sent it to the tab bar and is what the index mapping fixes.
+- Left as **on**, so Ema sees it; one press turns it off.

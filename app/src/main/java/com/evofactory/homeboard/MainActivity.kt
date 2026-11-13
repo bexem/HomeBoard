@@ -190,6 +190,7 @@ class MainActivity : ComponentActivity() {
     private var homeAlertsRow by mutableStateOf(false)
     private var continueWatching by mutableStateOf(true)
     private var appRowWrap by mutableStateOf(true)
+    private var appRowCentre by mutableStateOf(false)
     private var allAppsTile by mutableStateOf(true)
     private var allAppsLines by mutableStateOf(ALL_APPS_LINES_DEFAULT)
     private var allAppsVertical by mutableStateOf(false)
@@ -243,6 +244,7 @@ class MainActivity : ComponentActivity() {
         homeAlertsRow = prefs.homeAlertsRow
         continueWatching = prefs.continueWatching
         appRowWrap = prefs.appRowWrap
+        appRowCentre = prefs.appRowCentre
         allAppsTile = prefs.allAppsTile
         allAppsLines = prefs.allAppsLines
         allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
@@ -788,6 +790,7 @@ class MainActivity : ComponentActivity() {
                                             favourites = favourites,
                                             allAppsTile = allAppsTile,
                                             wrapRow = appRowWrap,
+                                    centre = appRowCentre,
                                             restoreKey = if (allAppsOpen) null else allAppsReturnKey,
                                             onRestored = { allAppsReturnKey = null },
                                             onOpenAllApps = {
@@ -1165,6 +1168,7 @@ class MainActivity : ComponentActivity() {
                                 homeAlertsRow = prefs.homeAlertsRow
                                 continueWatching = prefs.continueWatching
                                 appRowWrap = prefs.appRowWrap
+                                appRowCentre = prefs.appRowCentre
                                 allAppsTile = prefs.allAppsTile
                                 allAppsLines = prefs.allAppsLines
                                 allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
@@ -1275,6 +1279,7 @@ class MainActivity : ComponentActivity() {
             homeAlertsRow = prefs.homeAlertsRow
             continueWatching = prefs.continueWatching
             appRowWrap = prefs.appRowWrap
+            appRowCentre = prefs.appRowCentre
             allAppsTile = prefs.allAppsTile
             allAppsLines = prefs.allAppsLines
             allAppsVertical = prefs.allAppsScroll == ALL_APPS_VERTICAL
