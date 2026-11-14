@@ -2022,3 +2022,10 @@ keep its own visibility ("a fork's visibility depends on the upstream repository
 that is flipped. So: `gh repo fork fplanque/HomeBoard`, push these same commits, set the default
 branch, then delete the private mirror. No released APK either way: this build keeps upstream's
 `applicationId` and `versionCode`, so it can never update, or be updated by, an upstream release.
+
+The first version of that summary was wrong in two ways, worth not repeating: it listed repairs of
+this fork's own defects as features (focus dead ends, the unreachable vacuum row, the clipped settings
+rows) and it left out the settings page, which is the largest thing the fork builds. The README's
+"What the fork adds" is now the new surfaces and the shared implementations, "Where it differs from
+upstream" is behaviour, and "Fixed upstream" is the one genuine upstream defect — the SDP rewrite that
+blacked every camera. Repairs of fork code belong here, named as repairs.

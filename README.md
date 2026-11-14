@@ -1,19 +1,42 @@
 # HomeBoard — a fork
 
-A personal fork of [fplanque/HomeBoard](https://github.com/fplanque/HomeBoard) (Apache-2.0), running on an NVIDIA Shield in a Home Assistant household. `main` is upstream unmodified: every change below sits on a `fork/*` branch, one commit per built milestone. [FORK.md](FORK.md) is the ledger — what each milestone adds, the designs worth keeping, and what is deferred.
+A personal fork of [fplanque/HomeBoard](https://github.com/fplanque/HomeBoard) (Apache-2.0), running on an NVIDIA Shield in a Home Assistant household. `main` is upstream unmodified at `9cce11b` (1.2.0, `versionCode 17`); the work is on `fork/*`, one commit per built milestone, 40 of them. [FORK.md](FORK.md) is the ledger: per milestone, the files touched, the designs worth keeping, what was verified on the TV — and the defects found there and fixed.
 
 There are no releases and no APKs here. Build one yourself, see [Build from source](#build-from-source). This fork keeps upstream's `applicationId` and `versionCode` deliberately, so a build of it and an upstream release are the same app to Android: they cannot sit side by side, and installing one over the other fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the signing keys differ. Uninstall first.
 
-## What this fork changes
+## What the fork adds
 
-- **Settings**: one schema-driven menu, so rows render from data rather than hand-written code; the same settings reachable as a page; export/import v3, which carries ordered lists and every preference instead of a subset.
-- **Calendar**: a card with the calendars you chose in your order, a colour each, today/tomorrow grouping, all-day rows, and an empty state that can hide itself.
-- **Home tab**: widgets sized in shares of the row, placed either side, the app row able to centre itself, the column layout rebuilt.
-- **Cameras**: the shape remembered per camera, a camera picked with the remote beating the shuffle, the strip its own switch, a grid that uses the width.
-- **Assistant**: reachable rows with left/right acting on them, per-room device tiles, a generic service tile chosen from the server's own list, the vacuum's own rooms, and OK on the weather opening its forecast.
-- **Notifications**: the badge counts the source you choose, greys out when the count is not news, and the panel separates what can be dismissed from what cannot.
-- **Dialogs**: one header, a focus path that always reaches the X and the Done button, rows that ellipsize instead of wrapping, and the screensaver's settings as rows on the page instead of a dialog.
-- **One of each thing**: one colour picker, one entity picker, one URL normaliser, one toggle row, one reader/parser/empty-state per source.
+**The settings are a screen of their own.** Upstream opens a dialog of hand-written rows. Here every setting is one entry in `SettingsSchema.kt` — key, category, title, description, control kind, and the condition under which it applies — and `SettingsPage.kt` draws all of it: a rail of ten entries, a search field that filters every row across all of them, rows grouped into cards by subject, a drawn switch or stepper per control, rows that hide while they cannot do anything, and doors that state what is behind them ("6 cameras", "Devices on it · 13 chosen"). A new setting is one schema entry. The old dialog's body was deleted rather than kept as a second renderer with a second set of focus paths.
+
+**Settings travel between TVs with their lists.** Export and import share one checklist that names the file and each section it will replace — the cameras, the Home Assistant login, its sensors and actions, the Frigate login, the settings as a set, the app tiles in their order — and reach the file three ways: the system picker, the TV's own folder browser, or the app folder for `adb push`/`pull`. The format is v3: every preference, ordered lists included, sits under one "Settings" line instead of a hand-picked subset. The newest three exports are kept.
+
+**A calendar card.** The calendars you chose, in priority order, each with a colour from the launcher's one picker, grouped today/tomorrow or by calendar, all-day entries included, a set number of events, and an empty state that can hide itself. It reads Home Assistant over REST (`/api/calendars`) because `calendar/get_events` is not registered on every server, and accepts both shapes of event.
+
+**Cameras from Home Assistant.** A TV that may reach Home Assistant but not the cameras' own addresses gets the picture from Home Assistant instead: one chosen camera live over HLS, the rest as `camera/proxy` stills refreshed every ten seconds, all with the TV's own token. Direct RTSP stays the default.
+
+**An All apps page, and favourites.** An overlay page with every installed app — grid or sideways scroll, one to six lines, the same tile menu as the row (Pin/Unpin, Hide/Unhide, Set icon, Info, Uninstall) — plus an editor for which apps the row shows and in what order, a row that wraps at its ends, and an option to centre the row when the apps do not reach the edge.
+
+**A background.** A colour or a picture behind everything, with fit and a scrim, over the unchanged dark scheme.
+
+**A shuffle, per session.** One seed per session: the camera on the Home tab, the top-bar actions and the Assistant cards are ordered once when the TV is switched on and stay put, re-rolled after a configurable number of hours, with the camera-and-widgets sides optionally swapped. The app row is exempt, because favourites curate it. The switches apply live.
+
+**The TV's own notifications, and a count that says what it counts.** A notification listener and a panel drawn by the launcher, since this Shield's notification panel cannot be opened by another app. The badge beside the clock counts unseen Frigate alerts, every notification, or only the dismissible ones, opens what it counts, and turns grey when all it has is the services' own ongoing notifications. "Mark the alerts as reviewed" clears the dot and the count without opening the tab.
+
+**Smaller additions.** Names on screen for Home Assistant entities, without touching an id; service tiles picked from the server's own list; vacuum room cleaning from the robot's own rooms; OK on the weather opening the forecast; the Home Assistant address, login and logout as three rows rather than one door; the home helper as a row that states whether it is needed; Frigate's own mark in the rail. And one implementation of each thing that used to exist twice: a colour picker (a grid with recent colours), an entity picker whose OK says what it does, a URL normaliser, a toggle row, a dialog header, an empty state, a focus request that survives layout.
+
+## Where it differs from upstream
+
+- **Assistant tab:** per-room cards of devices you choose, split from the list beside the camera. Lights and fans step their level with left/right, switches toggle, alarms arm and disarm with a code that is not kept, robots start, pause and dock, scripts run.
+- **Home tab:** each camera remembers the shape its stream reports and a chosen shape sticks; "Space beside the camera" is five widths (the gap, centred, two fifths, half, the rest); the widgets can sit either side and the slack goes between them or to the two sides; the app row can centre.
+- **Cameras tab:** the alert strip is its own switch and gives the grid that room; a grid that fits uses the screen's width.
+- **Screensaver:** its settings are rows on the page, not a dialog behind a door, and its camera list uses the shared picker.
+- **Removed:** upstream's `CH` mark over the Home camera. The behaviour it advertised is now the "Channel keys switch cameras" setting.
+
+## Fixed upstream
+
+**Every camera went black** once the cameras advertised an AAC audio track: upstream rewrote the stream description to drop audio when a camera's sound was off, and the player then never produced a frame. The description is handed over untouched now and the audio is disabled through the player's own track selection.
+
+The ledger also records what the TV caught in this fork's own work: the first settings menu clipped eight of its thirty-nine rows on a 1080p screen, focus could dead-end in a dialog, a vacuum row drew but could not be selected, "Wider widgets" changed nothing, and a dialog header left a button's width of gap before its X. Those are defects found on the device and fixed, with the symptom, the cause and the check that closed them, per milestone in [FORK.md](FORK.md). They are not features.
 
 Everything below is upstream's README, unchanged apart from this section.
 
