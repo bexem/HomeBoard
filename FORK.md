@@ -1928,3 +1928,22 @@ Pixel-sampled: with the six ongoing notifications the badge disc is `#2B2A2F` â€
 moon and Ethernet buttons (their discs sample `#2B2A2F`, their icons `#9A979D`, the badge's number
 the same). With one posted dismissible notification it turns `#C62828` again, and back to grey when
 that one is cleared.
+
+## The cog is the same grey as the buttons beside it (2026-11-14)
+
+Ema: "cog grey". `IconButton`'s own container is a shade darker (`#222226`) than the `Surface` the
+moon, the network button and the badge use (`#2B2A2F`), so the cog read as a different kind of button
+in the same row.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `SettingsButton.kt` | The IconButton takes the same four colours as its neighbours: `surfaceVariant` disc, `onSurfaceVariant` icon, `onSurface` when focused, `inverseOnSurface` icon then |
+
+### Verified on the Shield (2026-11-14, 14:55)
+
+The TV had slept overnight; woken with WAKEUP and HOME first, then measured. Unfocused discs:
+moon `#2B2A2F`, network `#2B2A2F`, cog `#2B2A2F`, badge `#2B2A2F` â€” four identical. Focused cog:
+disc `#C4C1C6` (the same `onSurface` the neighbours take when focused), dark icon, "Settings" label
+under it.

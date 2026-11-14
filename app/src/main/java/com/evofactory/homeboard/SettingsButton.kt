@@ -41,7 +41,14 @@ fun SettingsButton(
         IconButton(
             onClick = onOpenSettings,
             modifier = Modifier.size(SettingsButtonSize).onFocusChanged { focused = it.isFocused },
-            colors = IconButtonDefaults.colors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+            // The same four colours the moon and the network button take: an IconButton's own
+            // container is a shade darker, which read as a different button beside them
+            colors = IconButtonDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.onSurface,
+                focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            ),
         ) {
             Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = "Settings")
         }
