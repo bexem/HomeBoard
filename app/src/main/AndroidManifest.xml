@@ -57,6 +57,7 @@
 
     <application
         android:name=".HomeBoardApp"
+        android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@drawable/banner"
         android:label="@string/app_name"

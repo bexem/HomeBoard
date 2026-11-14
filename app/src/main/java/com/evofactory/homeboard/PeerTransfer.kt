@@ -73,7 +73,6 @@ private const val CONNECT_TIMEOUT_MS = 3_000
 private const val REPLY_TIMEOUT_MS = 10_000
 private const val RECONNECT_DELAY_MS = 1_000L
 private const val MAX_HANDSHAKE_BYTES = 1024
-private const val MAX_SETTINGS_BYTES = 4 * 1024 * 1024
 private const val GONE = "gone"
 private const val ACK_OK = "ok"
 private const val ACK_BAD = "bad"
@@ -327,7 +326,9 @@ class PeerSession private constructor(
 
         /** Null if it isn't the TV chosen */
         fun accept(socket: Socket, peer: Peer): PeerSession? {
-            socket.soTimeout = REPLY_TIMEOUT_MS
+            // The handshake is a few bytes either way: a connection that says nothing is only
+            // holding the accept loop, so it gets the connect timeout, not the reply one
+            socket.soTimeout = CONNECT_TIMEOUT_MS
             val input = DataInputStream(socket.getInputStream())
             val output = DataOutputStream(socket.getOutputStream())
             val theirId = String(readFrame(input, MAX_HANDSHAKE_BYTES))
@@ -335,7 +336,10 @@ class PeerSession private constructor(
             if (theirId != peer.id) return null
             val keys = newKeys()
             writeFrame(output, keys.public.encoded)
-            return derive(socket, keys.private, theirKey, theirKey, keys.public.encoded, peer)
+            val session = derive(socket, keys.private, theirKey, theirKey, keys.public.encoded, peer)
+            // The payload may take as long as the other TV takes to choose it
+            socket.soTimeout = REPLY_TIMEOUT_MS
+            return session
         }
 
         private fun newKeys() = KeyPairGenerator.getInstance("EC").apply {
@@ -452,7 +456,7 @@ private fun PeerList(
 @Composable
 private fun CodeLine(session: PeerSession) {
     Text(
-        "Both TVs should show the code ${session.code}",
+        "Both TVs show the code ${session.code}. If the other one shows different digits, someone is in between: close this.",
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(12.dp),
     )
@@ -499,6 +503,9 @@ fun ExportToTv(file: SettingsFile, onSaveToFile: () -> Unit, onDismiss: () -> Un
             title = "Send to ${current.peer.name}",
             confirmLabel = "Send",
             file = file,
+            // The Home Assistant login is the key to the whole home and a peer is any device that
+            // answers the broadcast: it only travels if it's ticked on purpose
+            startUnchecked = setOf(LOGIN_KEY),
             onConfirm = { chosen ->
                 if (!sending) {
                     sending = true
@@ -516,6 +523,16 @@ fun ExportToTv(file: SettingsFile, onSaveToFile: () -> Unit, onDismiss: () -> Un
                 }
             },
             onDismiss = { link.chosenId = null },
+            below = {
+                if (file.login != null) {
+                    Text(
+                        "The Home Assistant login is unticked. Tick it only if both TVs show the same code: it is that TV's key to this home.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                    )
+                }
+            },
             above = { CodeLine(current) },
         )
     }

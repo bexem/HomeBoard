@@ -25,6 +25,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.InputStream
+
+/** A settings file is a few KB; anything near this is not one, and is not worth decoding into the launcher's heap */
+const val MAX_SETTINGS_BYTES = 4 * 1024 * 1024
+
+/** How many exported settings files stay in the app folder: they hold the logins in the clear */
+private const val EXPORTS_KEPT = 3
 
 /**
  * Where a settings file goes, and where one comes from.
@@ -160,13 +167,25 @@ private fun newestSettingsFile(context: Context): File? =
         ?.filter { it.isFile && it.name.endsWith(".json", ignoreCase = true) }
         ?.maxByOrNull { it.lastModified() }
 
+/** At most [max] bytes, or null when there are more: reads a chunk at a time, never the whole file first */
+private fun InputStream.readAtMost(max: Int): ByteArray? {
+    val bytes = java.io.ByteArrayOutputStream()
+    val chunk = ByteArray(64 * 1024)
+    while (true) {
+        val read = read(chunk)
+        if (read < 0) return bytes.toByteArray()
+        if (bytes.size() + read > max) return null
+        bytes.write(chunk, 0, read)
+    }
+}
+
 private fun readSettings(context: Context, uri: Uri): SettingsFile? =
     context.contentResolver.openInputStream(uri)?.use { input ->
-        input.readBytes().decodeToString().let(::settingsFromJson)
+        input.readAtMost(MAX_SETTINGS_BYTES)?.decodeToString()?.let(::settingsFromJson)
     }
 
 private fun readSettings(context: Context, file: File): SettingsFile? =
-    runCatching { settingsFromJson(file.readText()) }.getOrNull()
+    if (file.length() > MAX_SETTINGS_BYTES) null else runCatching { settingsFromJson(file.readText()) }.getOrNull()
 
 private fun writeSettings(context: Context, uri: Uri, json: String) {
     context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
@@ -177,5 +196,11 @@ private fun writeSettingsToAppFolder(context: Context, name: String, json: Strin
     val dir = appFolder(context) ?: return null
     val file = File(dir, name)
     file.writeText(json)
+    // Each one holds the logins in the clear: only the last few stay, for the next import
+    dir.listFiles()
+        ?.filter { it.isFile && it.name.endsWith(".json", ignoreCase = true) }
+        ?.sortedByDescending { it.lastModified() }
+        ?.drop(EXPORTS_KEPT)
+        ?.forEach { it.delete() }
     return file.path
 }

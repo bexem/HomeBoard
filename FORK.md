@@ -1947,3 +1947,62 @@ The TV had slept overnight; woken with WAKEUP and HOME first, then measured. Unf
 moon `#2B2A2F`, network `#2B2A2F`, cog `#2B2A2F`, badge `#2B2A2F` — four identical. Focused cog:
 disc `#C4C1C6` (the same `onSurface` the neighbours take when focused), dark icon, "Settings" label
 under it.
+
+## Security pass: what a launcher on a home network actually exposes (2026-11-14)
+
+Ema: "audit the code for security and cybersecurity, it's a TV launcher so there shouldn't be much
+going on." An audit of the whole app, read-only first, found no Critical and one High: the peer
+export sent the Home Assistant long-lived token to a peer whose identity nobody checked. That token
+has no expiry and controls locks, the alarm and the cameras, so the transfer needed a gate that the
+normal flow does not notice.
+
+### The findings and what changed
+
+| Finding | Fix |
+|---|---|
+| Peer export: the four-digit code was drawn but never compared, so any device that answers the UDP broadcast could take the token with one wrong pick in the list | The Home Assistant login starts **unticked** in the send-to-a-TV checklist (`startUnchecked` on `ChecklistDialog`), with a line under the list saying to tick it only if both TVs show the same code; the code line now says what a mismatch means |
+| Cloud backup on by default: `ha_token`, `ha_refresh_token` and the Frigate password went to the user's Google backup | `android:allowBackup="false"` |
+| App-folder exports accumulated forever on shared storage, each holding the logins in the clear | The newest 3 stay, older ones are deleted after each write (`EXPORTS_KEPT`) |
+| Import read a picked file with no size cap: a wrong tap on a video could OOM-kill the launcher | `InputStream.readAtMost(MAX_SETTINGS_BYTES)`; the peer path and the file path now share one 4 MB limit |
+| A silent connection held the peer accept loop for the full 10 s reply timeout | The handshake uses the 3 s connect timeout; the reply timeout is restored for the payload |
+
+### Deliberately not changed
+
+- **Cleartext for any host.** Hosts are typed in, so no domain config can list them; a `http://` Home
+  Assistant sends its token over plain `ws://`. Warning text was considered and left out: it adds a
+  row to a focus-driven dialog for information the operator cannot act on.
+- **Frigate accepts any certificate before a pin exists.** The first connection from the settings is
+  the trust-on-first-use step, and the password goes out with it. Closing that needs a fingerprint
+  confirmation on the setup screen, which is a new step in a flow that works.
+- **Peer transfer still finds TVs by broadcast.** Any LAN device can appear in the list; the login
+  row is what stops it from being worth anything. Real mutual authentication needs an out-of-band
+  PIN typed on both TVs.
+- **`requestLegacyExternalStorage="true"`.** Ignored at targetSdk 36, but it still governs Android
+  10's file browsing, which the "Browse this TV's folders" row depends on.
+
+### Checked and sound
+
+No WebView, no exported providers or receivers, the exported services all carry their `BIND_*`
+permissions, no shell string is ever built from input (`ping`, `getprop` get argv), no secret in
+tracked files (the keystore lives in `~/.homeboard`, its password in the Keychain), the Home
+Assistant token travels in an `Authorization` header and the websocket auth frame never in a query
+string, `AppLog` strips `user:pass@` and `token=`/`password=`/`api_key=` parameters, the peer
+handshake is ephemeral ECDH P-256 with AES-256-GCM and distinct AAD labels, and the Frigate pin fails
+closed on a mismatch.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `AndroidManifest.xml` | `android:allowBackup="false"` |
+| `ExportImport.kt` | `LOGIN_KEY` internal; `ChecklistDialog` takes `startUnchecked` |
+| `PeerTransfer.kt` | Send checklist leaves the login unticked and explains the code; `CodeLine` says what a mismatch means; handshake timeout split from the reply timeout; the size cap moved out |
+| `SettingsTransfer.kt` | `MAX_SETTINGS_BYTES` shared, `readAtMost`, capped `readSettings`, `EXPORTS_KEPT` pruning |
+
+### Verified (2026-11-14)
+
+`./gradlew assembleDebug` builds, and the merged manifest at
+`app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml` carries
+`allowBackup="false"`. Not verified on the Shield: a debug build cannot update the release-signed
+install, and uninstalling would take the settings with it. The unticked row, the code line and the
+two-TV send still need a device pass after the next release install.

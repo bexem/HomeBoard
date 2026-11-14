@@ -132,7 +132,7 @@ data class SettingsFile(
         .toString(2)
 }
 
-private const val LOGIN_KEY = "login"
+internal const val LOGIN_KEY = "login"
 private const val FRIGATE_KEY = "frigate"
 private const val APP_TILES_KEY = "appTiles"
 private const val PREFERENCES_KEY = "preferences"
@@ -228,7 +228,7 @@ private fun sections(file: SettingsFile) = listOf(
     ),
 ).filter { it.rows.isNotEmpty() }
 
-/** Everything starts checked; the confirm button is greyed out once nothing is. */
+/** Everything starts checked except [startUnchecked]; the confirm button is greyed out once nothing is. */
 @Composable
 fun ChecklistDialog(
     title: String,
@@ -237,11 +237,12 @@ fun ChecklistDialog(
     onConfirm: (SettingsFile) -> Unit,
     onDismiss: () -> Unit,
     subtitle: String? = null,
+    startUnchecked: Set<String> = emptySet(),
     above: @Composable () -> Unit = {},
     below: @Composable () -> Unit = {},
 ) {
     val sections = remember(file) { sections(file) }
-    val unchecked = remember(file) { mutableStateListOf<String>() }
+    val unchecked = remember(file, startUnchecked) { mutableStateListOf<String>().apply { addAll(startUnchecked) } }
     val allKeys = remember(sections) { sections.flatMap { section -> section.rows.map { it.key } } }
     val confirm = remember { FocusRequester() }
     val cancel = remember { FocusRequester() }
