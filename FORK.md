@@ -2006,3 +2006,19 @@ closed on a mismatch.
 `allowBackup="false"`. Not verified on the Shield: a debug build cannot update the release-signed
 install, and uninstalling would take the settings with it. The unticked row, the code line and the
 two-TV send still need a device pass after the next release install.
+
+## Publishing (2026-11-14)
+
+`origin` is `bexem/HomeBoard`, private, `fork/m1` as its default branch, with `main` mirroring
+`upstream/main`. Two things decided it:
+
+- The README now opens with what this fork is and what it changes, because upstream's README alone
+  would have published 40 commits of work under Evo Factory's name. Nothing else in it changed.
+- This ledger used to carry the household's real addresses (`the private subnet` for Home Assistant and the
+  doorbell). They are `<ha-host>` and `<camera-host>` now. `reports/` carried none.
+
+To make it public it has to become a fork of `fplanque/HomeBoard`, because GitHub will not let a fork
+keep its own visibility ("a fork's visibility depends on the upstream repository") and detaches one
+that is flipped. So: `gh repo fork fplanque/HomeBoard`, push these same commits, set the default
+branch, then delete the private mirror. No released APK either way: this build keeps upstream's
+`applicationId` and `versionCode`, so it can never update, or be updated by, an upstream release.
