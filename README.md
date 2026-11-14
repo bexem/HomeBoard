@@ -1,4 +1,23 @@
-# HomeBoard
+# HomeBoard — a fork
+
+A personal fork of [fplanque/HomeBoard](https://github.com/fplanque/HomeBoard) (Apache-2.0), running on an NVIDIA Shield in a Home Assistant household. `main` is upstream unmodified: every change below sits on a `fork/*` branch, one commit per built milestone. [FORK.md](FORK.md) is the ledger — what each milestone adds, the designs worth keeping, and what is deferred.
+
+There are no releases and no APKs here. Build one yourself, see [Build from source](#build-from-source). This fork keeps upstream's `applicationId` and `versionCode` deliberately, so a build of it and an upstream release are the same app to Android: they cannot sit side by side, and installing one over the other fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the signing keys differ. Uninstall first.
+
+## What this fork changes
+
+- **Settings**: one schema-driven menu, so rows render from data rather than hand-written code; the same settings reachable as a page; export/import v3, which carries ordered lists and every preference instead of a subset.
+- **Calendar**: a card with the calendars you chose in your order, a colour each, today/tomorrow grouping, all-day rows, and an empty state that can hide itself.
+- **Home tab**: widgets sized in shares of the row, placed either side, the app row able to centre itself, the column layout rebuilt.
+- **Cameras**: the shape remembered per camera, a camera picked with the remote beating the shuffle, the strip its own switch, a grid that uses the width.
+- **Assistant**: reachable rows with left/right acting on them, per-room device tiles, a generic service tile chosen from the server's own list, the vacuum's own rooms, and OK on the weather opening its forecast.
+- **Notifications**: the badge counts the source you choose, greys out when the count is not news, and the panel separates what can be dismissed from what cannot.
+- **Dialogs**: one header, a focus path that always reaches the X and the Done button, rows that ellipsize instead of wrapping, and the screensaver's settings as rows on the page instead of a dialog.
+- **One of each thing**: one colour picker, one entity picker, one URL normaliser, one toggle row, one reader/parser/empty-state per source.
+
+Everything below is upstream's README, unchanged apart from this section.
+
+---
 
 A launcher for Android TV and Google TV that puts your apps, cameras, alerts and Home Assistant on one calm screen. No banners to scroll past, no account to create.
 
@@ -77,4 +96,6 @@ The release build looks for its signing key outside this repo, and comes out uns
 
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-Copyright 2026 Evo Factory S.à r.l.
+Upstream, and all the launcher this fork builds on: copyright 2026 Evo Factory S.à r.l.
+
+The fork's own changes, listed in [FORK.md](FORK.md), are released under the same Apache-2.0 licence.
