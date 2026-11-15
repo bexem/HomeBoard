@@ -2054,7 +2054,13 @@ anymore."
 - Shield: the two rows appear in Calendar → Window; the sub-setting shows only with the toggle on
   (seen both ways); the stepper moved 0 → 2 → 0 and stored `calendar_hide_after` each time.
 - Shield, card with the setting on and grace 0 at 00:15: the two events of today (16:13–17:13) and the
-  ones after stay on the card — nothing still in the future is wrongly hidden. The positive case needs
-  an event that has ended, so a check is scheduled for 17:15 today, when the 16:13–17:13 pair should
-  have left on its own.
+  ones after stay on the card — nothing still in the future is wrongly hidden.
+- **Not seen on the device yet: an event leaving on its own.** The check pencilled in for 17:15 that
+  day was never recorded, so it stays open. What the TV proves is the wiring (both rows, the
+  sub-setting following the toggle, the hours stored, nothing future dropped); what the six unit tests
+  prove is the leaving itself. The honest device check is one screenshot either side of an event's end.
+- One shape this setting cannot show, and not its fault: an all-day event that spans several days is
+  already drawn on its first day only (`HaEvent.from` keeps no end for an all-day event, and the window
+  filter starts at `startDay`), so hiding past events changes nothing about it. Teaching the model a
+  last day is a calendar change, not a hide-past one.
 - Left ON at grace 0, as asked for; one press of the toggle returns the old behaviour.
