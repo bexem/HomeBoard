@@ -175,7 +175,7 @@ Channel keys and both grid toggles.
   geometry used to drop the focus somewhere invisible), and the last row's Down is pinned the same way.
   Only Left (rail) and Up leave a row. Verified on the TV: three Rights left the row lit, twelve Downs
   scrolled the page with the cursor still on screen.
-- **Shuffle can swap the sides**: `shuffle_sides` puts the camera left and the widgets right, or the other
+- **Burn-in protection can swap the sides**: `shuffle_sides` puts the camera left and the widgets right, or the other
   way round, once per session — in addition to the random camera, top-bar order and card order. The camera
   slot is extracted so the row can render either order without moving any other layout code.
 - **Rail ends are pinned**: Up from About goes to Advanced, Down on Close settings stays there, Up on the
@@ -650,6 +650,11 @@ Renaming only; every key is unchanged, so an export file still reads.
 | Home → All apps page → "Lines" | "Per line" | "lines" of what |
 | Cameras → "Cameras" (row in the "Cameras" card) | "Camera list" | three "Cameras" in a row |
 | Cameras → Source → "Pictures come from" | "Where the pictures come from" | a label doing a sentence's job |
+| Home → *Shuffle* (the group) | *Burn-in protection* | "shuffle" says what the code does, not why anyone would want it |
+| Home → Burn-in protection → "Shuffle the camera" | "Change the camera each session" | same |
+| Home → Burn-in protection → "Shuffle the top bar" | "Change the action buttons' order" | same |
+| Home → Burn-in protection → "Shuffle the Assistant cards" | "Change the room cards' order" | same |
+| Home → Burn-in protection → "New order after" | "A new order after" | a stepper whose title was a fragment |
 | Cameras → Keys and sound → "Sound" | "Camera sound" | there is a microphone in the house |
 | Calendar → "Calendars" (row in the "Calendars" card) | "Which calendars" | one word for the card and the list it edits |
 | Calendar → Display → "Order" | "Sort by" | "order" is also an Assistant part |
@@ -2064,3 +2069,26 @@ anymore."
   filter starts at `startDay`), so hiding past events changes nothing about it. Teaching the model a
   last day is a calendar change, not a hide-past one.
 - Left ON at grace 0, as asked for; one press of the toggle returns the old behaviour.
+
+## The shuffle is called what it is for (2026-11-15)
+
+Ema: "we should rename the shuffle in the settings to something that makes the user understand what it
+is doing and why (burn-in avoidance)."
+
+The group was **Shuffle**, which names the mechanism and never the reason. Nothing in it moved things
+"for fun": every switch exists so that the same bright pixels — a camera timestamp, an icon, a card
+edge — are not in the same place for months, which is what leaves a shadow on a screen.
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `SettingsSchema.kt` | The group is **Burn-in protection**; the rows say what changes and each description gives the reason: "Change the camera each session", "Change the action buttons' order", "Swap the camera and the widgets", "Change the room cards' order", "A new order after" |
+
+Names only: every storage key (`shuffle_camera` &c.), the `LauncherPrefs` properties, the `Shuffle`
+object and the export format are untouched, so an export file still reads and no stored setting moves.
+
+### Verified on the Shield (2026-11-15, 00:30)
+
+Home → Burn-in protection on the TV, all five rows with their new titles and reasons legible, toggles
+and the stepper where they were. The rename table above carries the before/after.
