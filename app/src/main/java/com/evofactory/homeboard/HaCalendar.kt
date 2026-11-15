@@ -154,7 +154,22 @@ data class CalendarConfig(
     val hideEmpty: Boolean = true,
     val colours: List<String> = emptyList(),
     val grouping: String = CALENDAR_BY_TIME,
+    val hidePast: Boolean = false,
+    val hideAfterHours: Int = CALENDAR_HIDE_AFTER_DEFAULT,
 )
+
+/**
+ * Whether this event is over: past its end (or the end of its day, for an all-day one) plus [hours]
+ * of grace. An event with a start and no end has no moment to pass, so it is never over.
+ */
+private fun HaEvent.isOver(now: ZonedDateTime, hours: Int): Boolean {
+    val over = when {
+        allDay -> startDay.plusDays(1).atStartOfDay(now.zone)
+        end != null -> end!!
+        else -> return false
+    }
+    return now.isAfter(over.plusHours(hours.toLong()))
+}
 
 /**
  * The events of [eventsByCalendar] inside the window, in the order the calendars are listed, sorted
@@ -164,6 +179,7 @@ fun mergeCalendarEvents(
     eventsByCalendar: Map<String, List<HaEvent>>,
     config: CalendarConfig,
     today: LocalDate,
+    now: ZonedDateTime = ZonedDateTime.now(),
 ): List<HaEvent> {
     val lastDay = today.plusDays((config.days - 1).toLong())
     val rank = config.entities.withIndex().associate { (index, id) -> id to index }
@@ -171,6 +187,9 @@ fun mergeCalendarEvents(
         .flatMap { id -> eventsByCalendar[id].orEmpty() }
         .filter { !it.startDay.isBefore(today) && !it.startDay.isAfter(lastDay) }
         .filter { config.showAllDay || !it.allDay }
+        // Off by default: an event that is over disappears, even when it is still today's, after
+        // the hours the owner asked it to stay
+        .filter { !config.hidePast || !it.isOver(now, config.hideAfterHours) }
         .sortedWith(
             // By priority, every event of the first calendar comes before the next calendar's, so a
             // work shift is not pushed out by a birthday; by time, the card reads as a diary

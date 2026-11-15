@@ -34,25 +34,8 @@ class StreamDescriptionTest {
         assertEquals(listOf(SdpTrack("audio", "type 0", described = true)), sdpTracks(session + "m=audio 0 RTP/AVP 0\r\n"))
     }
 
-    @Test
-    fun audioTakenOut() {
-        assertEquals(session + video, sdpWithoutAudio(session + bareAudio + video))
-    }
-
-    @Test
-    fun filterRewritesTheDescriptionOnly() {
-        val sdp = session + video + bareAudio
-        val options = "RTSP/1.0 200 OK\r\nCSeq: 1\r\nPublic: DESCRIBE, SETUP, PLAY\r\n\r\n"
-        val describe = "RTSP/1.0 200 OK\r\nCSeq: 2\r\nContent-Type: application/sdp\r\nContent-Length: ${sdp.length}\r\n\r\n$sdp"
-        val media = byteArrayOf('$'.code.toByte(), 0, 0, 2, 1, 2)
-        val stream = RtspFilterStream(ByteArrayInputStream((options + describe).toByteArray() + media), ::sdpWithoutAudio)
-        val trimmed = session + video
-        assertEquals(
-            options + "RTSP/1.0 200 OK\r\nCSeq: 2\r\nContent-Type: application/sdp\r\nContent-Length: ${trimmed.length}\r\n\r\n$trimmed",
-            String(stream.readNBytes(options.length + describe.length - bareAudio.length)),
-        )
-        assertEquals(media.toList(), stream.readAllBytes().toList())
-    }
+    // The two tests of sdpWithoutAudio went with the function: the fork disables a track through the
+    // player instead of rewriting the stream description, so editing the SDP was removed (M8-M15).
 
     // RTP header: version 2, padding bit as given, payload type 104 with the marker
     private fun rtp(payload: List<Int>, padding: Int = 0): List<Int> {

@@ -2029,3 +2029,32 @@ rows) and it left out the settings page, which is the largest thing the fork bui
 "What the fork adds" is now the new surfaces and the shared implementations, "Where it differs from
 upstream" is behaviour, and "Fixed upstream" is the one genuine upstream defect — the SDP rewrite that
 blacked every camera. Repairs of fork code belong here, named as repairs.
+
+## The calendar can drop what is over (2026-11-15)
+
+Ema: a setting to hide past events even when they are still today's, with a sub-setting for how many
+hours after the end they stay — "0 would be for right away, ends at 09:00? At 09:01 you don't see it
+anymore."
+
+### Touched files
+
+| File | Change |
+|---|---|
+| `LauncherPrefs.kt` | `calendar_hide_past` (default off) and `calendar_hide_after` (0, `CALENDAR_HIDE_AFTER` = 0..24), both fed into `CalendarConfig`; new keys, no rename, export untouched |
+| `HaCalendar.kt` | `CalendarConfig.hidePast`/`hideAfterHours`; `mergeCalendarEvents` takes `now` (defaulting to the clock) and drops events that are over — past their end, or the end of their day for an all-day one, plus the grace hours. An event with a start and **no end has no moment to pass, so it never hides** |
+| `CalendarWidget.kt` | While the setting is on, the card re-reads the clock every 30 s, so an event leaves when it ends instead of waiting for the next Home Assistant refresh; off, nothing ticks |
+| `SettingsSchema.kt` | Calendar → Window → **Hide past events**, and under it **Keep them for** (0–24 h), shown only while the first is on |
+| `app/src/test/.../CalendarHidePastTest.kt` | Six cases on a fixed clock: ended at 09:59 with 0 h is gone at 10:00; running stays; 90 minutes over survives 2 h of grace and not 1; the setting off keeps everything; today's all-day event stays until its day ends; no end never hides |
+| `app/src/test/.../StreamDescriptionTest.kt` | Two tests of `sdpWithoutAudio` deleted with the function: the fork disables a track through the player instead of rewriting the SDP (removed in M8–M15), which had left the whole test source set uncompilable since that commit — found when this feature's test could not run |
+
+### Verified
+
+- `testDebugUnitTest`: **38 tests, 0 failures** (the six new ones included); the test source set
+  compiles again after the two obsolete tests went.
+- Shield: the two rows appear in Calendar → Window; the sub-setting shows only with the toggle on
+  (seen both ways); the stepper moved 0 → 2 → 0 and stored `calendar_hide_after` each time.
+- Shield, card with the setting on and grace 0 at 00:15: the two events of today (16:13–17:13) and the
+  ones after stay on the card — nothing still in the future is wrongly hidden. The positive case needs
+  an event that has ended, so a check is scheduled for 17:15 today, when the 16:13–17:13 pair should
+  have left on its own.
+- Left ON at grace 0, as asked for; one press of the toggle returns the old behaviour.

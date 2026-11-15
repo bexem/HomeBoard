@@ -491,6 +491,17 @@ class LauncherPrefs(context: Context) {
         get() = prefs.getBoolean("calendar_hide_empty", true)
         set(value) = prefs.edit { putBoolean("calendar_hide_empty", value) }
 
+    /** An event leaves the card once it is over, even when it is still today's */
+    var calendarHidePast: Boolean
+        get() = prefs.getBoolean("calendar_hide_past", false)
+        set(value) = prefs.edit { putBoolean("calendar_hide_past", value) }
+
+    /** Hours an event stays after it ends before it leaves the card; 0 is the minute it ends */
+    var calendarHideAfterHours: Int
+        get() = prefs.getInt("calendar_hide_after", CALENDAR_HIDE_AFTER_DEFAULT)
+            .coerceIn(CALENDAR_HIDE_AFTER)
+        set(value) = prefs.edit { putInt("calendar_hide_after", value.coerceIn(CALENDAR_HIDE_AFTER)) }
+
     /** The calendar card's settings as one value, read where they are all known at once */
     fun calendarConfig() = CalendarConfig(
         entities = calendarEntities,
@@ -501,6 +512,8 @@ class LauncherPrefs(context: Context) {
         hideEmpty = calendarHideEmpty,
         colours = calendarColours,
         grouping = calendarGrouping,
+        hidePast = calendarHidePast,
+        hideAfterHours = calendarHideAfterHours,
     )
 
     /** Leaves out the apps that only have a phone launcher, no TV entry point */
@@ -604,6 +617,10 @@ const val CALENDAR_MAX_EVENTS_DEFAULT = 20
 val CALENDAR_MAX_EVENTS = 1..50
 const val CALENDAR_REFRESH_DEFAULT = 30
 val CALENDAR_REFRESH = 5..120
+
+/** Hours an event stays after it ends; 0 hides it at the minute it ends, 24 keeps it most of a day */
+const val CALENDAR_HIDE_AFTER_DEFAULT = 0
+val CALENDAR_HIDE_AFTER = 0..24
 
 const val CAMERA_SIDE_LEFT = "left"
 const val CAMERA_SIDE_CENTRE = "centre"

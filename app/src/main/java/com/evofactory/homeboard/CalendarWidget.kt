@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -26,7 +29,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import kotlinx.coroutines.delay
 import java.time.LocalDate
+import java.time.ZonedDateTime
 
 /**
  * The Home tab's calendar, after the Calendar Pro card Ema uses on his dashboard: one block per
@@ -51,7 +56,10 @@ fun CalendarCard(
 ) {
     if (config.entities.isEmpty() || connection.calendarsUnsupported) return
     val today = LocalDate.now()
-    val events = mergeCalendarEvents(connection.calendarEvents, config, today)
+    // A card that hides what is over has to notice an event ending under it; without the setting
+    // there is nothing to tick for
+    val now = if (config.hidePast) rememberMinute() else remember { ZonedDateTime.now() }
+    val events = mergeCalendarEvents(connection.calendarEvents, config, today, now)
     val connecting = connection.status == HaStatus.Connecting && !connection.calendarsLoaded
     val offline = connection.status == HaStatus.Offline
     if (events.isEmpty() && config.hideEmpty && !connecting && !offline) return
@@ -79,6 +87,19 @@ fun CalendarCard(
             }
         }
     }
+}
+
+/** The time as it is this half minute: enough for an event to leave when it ends, no faster */
+@Composable
+private fun rememberMinute(): ZonedDateTime {
+    val now = remember { mutableStateOf(ZonedDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now.value = ZonedDateTime.now()
+        }
+    }
+    return now.value
 }
 
 /** Three entries and their spacing: what the side panel can give up without losing the sensors */
