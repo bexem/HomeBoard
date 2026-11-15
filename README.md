@@ -22,7 +22,7 @@ There's no APK here, no releases, nothing to download. Build one yourself, [Buil
 
 **A background.** A colour or a picture behind everything, with fit and a scrim. Still the dark scheme, because making it light would mean touching every colour in the app.
 
-**Shuffle.** New session, different camera, and the top bar and Assistant cards reshuffle with it. One seed per session, re-rolled after N hours, never in the middle of me watching something. The app row stays put, because favourites are the point.
+**Burn-in protection.** The settings call it that, because that's what it's for: the same bright pixels in the same place for months is what leaves a shadow on a TV. So each session the Home camera, the top-bar buttons and the Assistant cards change order, and the camera and the cards swap sides. One order per session, re-rolled after N hours of the TV being left on, never while I'm watching something. The app row stays put, because favourites are the point. It reads as "shuffle" in the code, which is the mechanism and not the reason.
 
 **The TV's own notifications.** The Shield's notification panel can't be opened by another app, so the launcher draws its own, from a listener. The count beside the clock opens what it counts, and it can count Frigate alerts, every notification, or only the dismissible ones. Red when there's news, grey when it's just services talking to themselves. "Mark the alerts as reviewed" clears it without having to open the tab.
 
