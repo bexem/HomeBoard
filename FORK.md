@@ -2185,3 +2185,11 @@ Two things happened on the way out, both worth knowing before the next push rewr
 
 No secret was ever in the tree: `local.properties` and `AGENTS.md` are gitignored, the keystore lives
 in `~/.homeboard` with its password in the Keychain, and no commit has ever held a token.
+
+### The README is the fork's own now (2026-11-18)
+
+It used to keep upstream's README underneath the fork's section, which read as if this repo shipped
+his releases and required his install steps. It doesn't, so that copy is gone. What is left: what this
+is, that it is not competing with upstream and that anything here is his to take if he wants it, what
+differs in plain words with the reason for each, what was fixed, what the TV caught in my own work, how
+to build, privacy, licence. Upstream's own pages say the rest better than a second copy could.
