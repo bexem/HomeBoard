@@ -182,14 +182,14 @@ private val CardFadeBottom = CardPeek * 2
  */
 private class CardWindow(val scroll: ScrollState, val height: Int, val fadeTop: Int, val fadeBottom: Int, val top: Int)
 
+// Narrower and the names get cut: about 3 columns on a TV
+private val MinCardWidth = 280.dp
+
 // The views' names sit this much higher than the tab's content: right under the top bar's tabs
 private val ViewRowLift = EdgePadding
 
 // Shorter than the top bar's tabs, so the two rows sit close
 private val ViewRowHeight = 32.dp
-
-// Narrower and the names get cut: about 3 columns on a TV
-private val MinCardWidth = 280.dp
 
 /**
  * The Assistant tab: everything chosen ([entityIds]: weather, sensors, scenes, scripts and buttons), in

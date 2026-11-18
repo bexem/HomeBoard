@@ -31,6 +31,7 @@ class SettingsActions(
     val logOutHomeAssistant: () -> Unit,
     val openHaLogin: () -> Unit,
     val openHomeHelper: () -> Unit,
+    val openDefaultHome: () -> Unit,
     // Null opens the dialog where it starts: the connection, or what it already holds
     val openHomeAssistant: (HaDialogTab?) -> Unit,
     val openFrigate: () -> Unit,
@@ -61,6 +62,7 @@ class SettingsActions(
         SettingAction.OpenHaAddress -> openHaAddress
         SettingAction.LogOutHomeAssistant -> logOutHomeAssistant
         SettingAction.OpenHaLogin -> openHaLogin
+        SettingAction.OpenDefaultHome -> openDefaultHome
         SettingAction.OpenHomeHelper -> openHomeHelper
         is SettingAction.OpenAssistantTab -> { { openHomeAssistant(action.tab) } }
         SettingAction.OpenFrigate -> openFrigate

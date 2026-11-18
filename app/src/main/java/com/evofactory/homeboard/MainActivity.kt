@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -75,6 +77,12 @@ class MainActivity : ComponentActivity() {
     private var camerasOpen by mutableStateOf(false)
     private var cameras by mutableStateOf(emptyList<Camera>())
     private var cameraGridLive by mutableStateOf(true)
+    private var clipsShown by mutableStateOf(FrigateKind.entries.toList())
+    private var blackBackground by mutableStateOf(false)
+    private var showFreeMemory by mutableStateOf(false)
+    // What the Clips tab shows
+    private var clipsKind by mutableStateOf(FrigateKind.Alert)
+    private var cameraGridMaxHardware by mutableIntStateOf(MAX_HARDWARE_DEFAULT)
     private var minimizeVideoStreams by mutableStateOf(false)
     private var selectedCamera by mutableStateOf("")
     // A camera picked with the remote outranks the shuffle, for the rest of the session
@@ -93,6 +101,8 @@ class MainActivity : ComponentActivity() {
     private var haServices by mutableStateOf<List<String>>(emptyList())
     private var frigate by mutableStateOf(FrigateServer())
     private var frigateOpen by mutableStateOf(false)
+    // The changed certificate whose dialog was closed: it doesn't open again for that one
+    private var dismissedCertificate by mutableStateOf<String?>(null)
     private var settingsOpen by mutableStateOf(false)
     // Counts every settings write, so the page re-reads its values
     private var settingsRevision by mutableIntStateOf(0)
@@ -118,6 +128,7 @@ class MainActivity : ComponentActivity() {
     private var haServicesOpen by mutableStateOf(false)
     private var haConnectFirst by mutableStateOf(false)
     private var homeHelperOpen by mutableStateOf(false)
+    private var defaultHomeOpen by mutableStateOf(false)
     private var logoutConfirm by mutableStateOf(false)
     private var newEvents by mutableIntStateOf(0)
     // The app whose icon is being chosen, and a counter that makes the tiles read the overrides again
@@ -181,7 +192,6 @@ class MainActivity : ComponentActivity() {
     private var replaceHome by mutableStateOf(false)
     private var catchHomeKey by mutableStateOf(false)
     private var reopenAfterHome by mutableStateOf(false)
-    private var showFreeMemory by mutableStateOf(false)
     private var exportOpen by mutableStateOf(false)
     private var importOpen by mutableStateOf(false)
     private var watchNext by mutableStateOf(emptyList<WatchItem>())
@@ -234,6 +244,10 @@ class MainActivity : ComponentActivity() {
         cameraGap = prefs.cameraGap
         haCameras = haCamerasFromPrefs(prefs.haCameraEntities)
         cameraGridLive = prefs.cameraGridLive
+        clipsShown = prefs.clipsShown
+        blackBackground = prefs.blackBackground
+        cameraGridMaxHardware = prefs.cameraGridMaxHardware
+        DebugOverlay.shown = prefs.showDebugInfo
         minimizeVideoStreams = prefs.minimizeVideoStreams
         selectedCamera = prefs.selectedCamera
         // After the saved selection, or the override is overwritten
@@ -279,7 +293,11 @@ class MainActivity : ComponentActivity() {
         if (!canReadWatchNext()) requestPermissions(arrayOf(READ_TV_LISTINGS), 0)
         setContent {
             MaterialTheme(colorScheme = AppColorScheme) {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                // HomeBoard settings › Background
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    colors = if (blackBackground) SurfaceDefaults.colors(containerColor = Color.Black) else SurfaceDefaults.colors(),
+                ) {
                     // Behind every screen: nothing, a colour, or a picture, under a darkness setting
                     LauncherBackgroundLayer(prefs)
                     // Phone-only apps are dropped at the source, so every view and menu agrees
@@ -290,9 +308,12 @@ class MainActivity : ComponentActivity() {
                     val hiddenApps = remember(all, hidden) {
                         all?.let { apps -> hidden.mapNotNull { key -> apps.find { it.key == key } } }
                     }
-                    // Alerts has nothing to show without a Frigate server, and can be hidden anyway
-                    val shownTabs = remember(alertsTab, frigate) {
-                        HomeTab.entries.filterNot { it == HomeTab.Alerts && (!alertsTab || frigate.url.isEmpty()) }
+                    // Alerts has nothing to show without a Frigate server, and can be hidden anyway;
+                    // with every list turned off in the Frigate dialog it has nothing to show either
+                    val shownTabs = remember(alertsTab, frigate, clipsShown) {
+                        HomeTab.entries.filterNot {
+                            it == HomeTab.Alerts && (!alertsTab || frigate.url.isEmpty() || clipsShown.isEmpty())
+                        }
                     }
                     // Hiding Alerts while it is open leaves on Home, rather than on a tab nobody can see
                     LaunchedEffect(shownTabs) {
@@ -422,7 +443,9 @@ class MainActivity : ComponentActivity() {
                     var tilesRowSelected by remember { mutableStateOf(false) }
                     var otherTileSelected by remember { mutableStateOf(false) }
                     var noAlertsSelected by remember { mutableStateOf(false) }
-                    val showNoAlertsTile = frigateFeed?.noRecentAlerts == true && bottomRow && alertsRowAllowed
+                    // Before Frigate is set up, on the Home tab, the tile offers to set it up
+                    val frigateSetUpTile = frigateFeed == null && tab == HomeTab.Home
+                    val showNoAlertsTile = (frigateFeed?.noRecentAlerts == true && bottomRow && alertsRowAllowed) || frigateSetUpTile
                     // Worked out before the tile is removed, when focus is still known to be on it
                     val lostNoAlertsTile = remember(showNoAlertsTile) { !showNoAlertsTile && noAlertsSelected }
                     val alertsExist = frigateFeed != null && frigateFeed.rowAlerts.isNotEmpty()
@@ -590,6 +613,7 @@ class MainActivity : ComponentActivity() {
                                 playSubstreams = cameraGridLive &&
                                     !(minimizeVideoStreams && (frigateFeed?.playing != null || fullScreenCamera != null)),
                                 minimizeStreams = minimizeVideoStreams,
+                                maxHardware = cameraGridMaxHardware,
                                 spareDecoder = fullScreenCamera != null,
                                 soundEnabled = cameraSound == CAMERA_SOUND_FULLSCREEN,
                                 onSelect = { fullScreenCamera = it },
@@ -600,9 +624,15 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.weight(1f).fillMaxWidth().padding(top = EdgePadding).onFocusChanged { middleSelected = it.hasFocus },
                             )
                         } else if (tab == HomeTab.Alerts) {
-                            FrigateAlertsGrid(
+                            FrigateClipsTab(
                                 feed = frigateFeed,
-                                onSetUp = { frigateOpen = true },
+                                kinds = clipsShown,
+                                // The one chosen, unless the Frigate dialog has hidden it since
+                                kind = clipsKind.takeIf { it in clipsShown } ?: clipsShown.firstOrNull() ?: FrigateKind.Alert,
+                                onKindChange = { clipsKind = it },
+                                tabFocus = alertsTabFocus,
+                                // A changed certificate: its dialog again
+                                onSetUp = { if (frigateFeed?.changedCertificate != null) dismissedCertificate = null else frigateOpen = true },
                                 modifier = Modifier.weight(1f).fillMaxWidth().padding(top = EdgePadding),
                             )
                         } else if (tab == HomeTab.Assistant) {
@@ -772,6 +802,13 @@ class MainActivity : ComponentActivity() {
                                                         modifier = Modifier.fillMaxSize(),
                                                     )
                                                 }
+                                            } else {
+                                                HomeAssistantSetUpOutline(
+                                                    buttonFocus = haSensorsFocus,
+                                                    upFocus = networkFocus,
+                                                    onSetUp = { haDialogTab = HaDialogTab.Home },
+                                                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                                                )
                                             }
                                         }
                                         when {
@@ -807,7 +844,6 @@ class MainActivity : ComponentActivity() {
                                                 panelSlot()
                                             }
                                         }
-
                                     }
                                 }
                             }
@@ -910,10 +946,20 @@ class MainActivity : ComponentActivity() {
                                             onFirstTileSelected = { firstTileSelected = it },
                                             onOtherTileSelected = { otherTileSelected = it },
                                             showNoAlertsTile = showNoAlertsTile,
+                                            noAlertsLabel = if (frigateSetUpTile) "Set up Frigate" else "No Recent Alerts",
                                             onNoAlertsSelected = { noAlertsSelected = it },
-                                            onNoAlertsClick = {
-                                                tab = HomeTab.Alerts
-                                                runCatching { alertsTabFocus.requestFocus() }
+                                            onNoAlertsClick = click@{
+                                                if (frigateSetUpTile) {
+                                                    frigateOpen = true
+                                                    return@click
+                                                }
+                                                // The Clips tab on its alerts, or its first list, unless it's turned off
+                                                val kind = FrigateKind.Alert.takeIf { it in clipsShown } ?: clipsShown.firstOrNull()
+                                                if (kind != null) {
+                                                    clipsKind = kind
+                                                    tab = HomeTab.Alerts
+                                                    runCatching { alertsTabFocus.requestFocus() }
+                                                }
                                             },
                                             modifier = Modifier.onFocusChanged { if (it.hasFocus) alertsRowShown = false },
                                         ) else AppRowPlaceholder()
@@ -959,6 +1005,11 @@ class MainActivity : ComponentActivity() {
                             onPlaySubstreamsChange = {
                                 cameraGridLive = it
                                 prefs.cameraGridLive = it
+                            },
+                            maxHardware = cameraGridMaxHardware,
+                            onMaxHardwareChange = {
+                                cameraGridMaxHardware = it
+                                prefs.cameraGridMaxHardware = it
                             },
                             minimizeStreams = minimizeVideoStreams,
                             onMinimizeStreamsChange = {
@@ -1011,6 +1062,9 @@ class MainActivity : ComponentActivity() {
                             onConfirm = { logOutOfHa() },
                             onDismiss = { logoutConfirm = false },
                         )
+                    }
+                    if (defaultHomeOpen) {
+                        DefaultHomeOptionDialog(onDismiss = { defaultHomeOpen = false })
                     }
                     if (homeHelperOpen) {
                         HomeHelperDialog(
@@ -1075,10 +1129,27 @@ class MainActivity : ComponentActivity() {
                     if (notificationGrantOpen) {
                         NotificationAccessDialog(onDismiss = { notificationGrantOpen = false })
                     }
+                    val changedCertificate = frigateFeed?.changedCertificate
+                    if (changedCertificate != null && changedCertificate != dismissedCertificate && !frigateOpen) {
+                        FrigateCertificateDialog(
+                            server = frigate,
+                            offered = changedCertificate,
+                            onAccept = { saveFrigate(frigate.copy(certPin = changedCertificate)) },
+                            onLogIn = { frigateOpen = true },
+                            onDismiss = { dismissedCertificate = changedCertificate },
+                        )
+                    }
                     if (frigateOpen) {
                         FrigateDialog(
                             initial = frigate,
+                            feed = frigateFeed,
                             onSave = ::saveFrigate,
+                            clipsShown = clipsShown,
+                            onClipsShownChange = {
+                                clipsShown = it
+                                prefs.clipsShown = it
+                                if (it.isEmpty() && tab == HomeTab.Alerts) tab = HomeTab.Home
+                            },
                             onDismiss = { frigateOpen = false },
                         )
                     }
@@ -1202,6 +1273,7 @@ class MainActivity : ComponentActivity() {
                                     haConnectFirst = true
                                 },
                                 openHomeHelper = { homeHelperOpen = true },
+                                openDefaultHome = { defaultHomeOpen = true },
                                 openHomeAssistant = { tab -> haDialogTab = tab ?: HaDialogTab.Home },
                                 openFrigate = { frigateOpen = true },
                                 openNotificationAccess = { notificationsOpen = true },
@@ -1276,6 +1348,9 @@ class MainActivity : ComponentActivity() {
                                 alertsDot = prefs.alertsDot
             badgeSource = prefs.badgeSource
                                 badgeSource = prefs.badgeSource
+                                // Not rows the page renders itself, so they are read back here
+                                blackBackground = prefs.blackBackground
+                                DebugOverlay.shown = prefs.showDebugInfo
                                 homeOverrideChanged()
                             },
                             onDismiss = { settingsOpen = false },
@@ -1497,7 +1572,6 @@ class MainActivity : ComponentActivity() {
         replaceHome = prefs.replaceHome
         catchHomeKey = prefs.catchHomeKey
         reopenAfterHome = prefs.reopenAfterHome
-        showFreeMemory = prefs.showFreeMemory
     }
 
     override fun onResume() {
@@ -1529,6 +1603,12 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         running = false
+    }
+
+    override fun onStart() {
+        // Before the cameras start, which happens just after this: the TV may be on its way to standby
+        ScreenState.refresh(this)
+        super.onStart()
     }
 
     override fun onStop() {

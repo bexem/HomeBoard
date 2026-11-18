@@ -204,12 +204,16 @@ private fun sections(file: SettingsFile) = listOf(
     Section(
         "Home Assistant login",
         listOfNotNull(
-            file.login?.let { Row(LOGIN_KEY, Uri.parse(it.url).host ?: it.url, file.username.ifEmpty { "Access token" }) },
+            // Which account the login is for: one made with a long-lived access token has no username
+            file.login?.let { Row(LOGIN_KEY, Uri.parse(it.url).host ?: it.url, if (file.username.isEmpty()) "Account: none, an access token" else "Account: ${file.username}") },
         ),
     ),
     Section("Home Assistant sensors", file.sensors.map { Row("sensor:${it.id}", it.name, it.id) }),
     Section("Home Assistant actions", file.actions.map { Row("action:${it.id}", it.name, it.id) }),
-    Section("Frigate login", listOfNotNull(file.frigate?.let { Row(FRIGATE_KEY, Uri.parse(it.url).host ?: it.url, it.username) })),
+    Section(
+        "Frigate login",
+        listOfNotNull(file.frigate?.let { Row(FRIGATE_KEY, Uri.parse(it.url).host ?: it.url, if (it.username.isEmpty()) "Account: none" else "Account: ${it.username}") }),
+    ),
     // One line: settings are restored as a set
     Section(
         "Settings",
@@ -270,7 +274,8 @@ fun ChecklistDialog(
         if (allKeys.isEmpty()) {
             EmptyState("Nothing here")
         }
-        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+        val listState = rememberLazyListState()
+        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).scrollIndicators(listState)) {
             sections.forEach { section ->
                 item(key = section.title) {
                     Text(
@@ -615,7 +620,7 @@ private fun FileBrowser(title: String, defaultName: String?, onPick: (File) -> U
         if (current == null && roots.isEmpty()) {
             Text("No storage available on this TV", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
         }
-        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).scrollIndicators(listState)) {
             items(rows, key = { it.key }) { row ->
                 ListItem(
                     selected = false,

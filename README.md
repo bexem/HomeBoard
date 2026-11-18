@@ -60,7 +60,7 @@ Website: https://www.evofactory.com/homeboard/
 - **Continue Watching:** what you started in the last two weeks comes first. Apps decide what they share with the TV, so this varies from one app, and one TV, to the next.
 - **App row:** move tiles, hide them, see app info or uninstall.
 - **Home button helper:** optionally makes the Home button bring you to HomeBoard.
-- **TV to TV:** send your settings to another TV on your network.
+- **TV to TV:** send your settings to another TV on your network, or type its address to reach one on another network.
 - **Diagnostics:** a built-in ping tool, network status, and debug logs with logins and tokens stripped out.
 
 Cameras, Home Assistant and Frigate are all optional. Without them, HomeBoard is the most minimalistic launcher ever: your apps, and you need to scroll down to see Continue Watching.
@@ -105,7 +105,7 @@ Use the name of the file you downloaded in place of `HomeBoard.apk`.
 
 ### Afterwards
 
-HomeBoard appears in your TV's apps. To make the Home button open it, go to the cog → HomeBoard settings, choose how it should take over, and turn on **HomeBoard Helper** in your TV's Accessibility settings. The helper is optional, and if HomeBoard fails to start a few times in a row, it switches itself off.
+HomeBoard appears in your TV's apps. To make the Home button open it, go to the cog → HomeBoard settings. Where Android allows it, choose **Make HomeBoard the default home app**. Most Android TV and Google TV sets don't allow it, because their own home screen always comes first; the option then says why. Otherwise, choose how HomeBoard should take over, and turn on **HomeBoard Helper** in your TV's Accessibility settings. The helper is optional, and if HomeBoard fails to start a few times in a row, it switches itself off.
 
 To update, install a newer APK the same way. Your settings stay in place.
 

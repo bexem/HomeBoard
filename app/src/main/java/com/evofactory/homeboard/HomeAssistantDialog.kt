@@ -661,7 +661,8 @@ private fun TopDialogScope.EntityPicker(
     if (keys.isEmpty()) {
         EmptyState("Nothing matches")
     }
-    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).padding(top = 4.dp)) {
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).padding(top = 4.dp).scrollIndicators(listState)) {
         sections.forEach { (title, items) ->
             entitySection(title, items, mark, onPress) { entity -> rows.row(entity.id).ringToTop() }
         }
@@ -743,7 +744,8 @@ private fun DashboardChoice(
     selectionDetail: String,
     rowModifier: (key: String) -> Modifier,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 4.dp)) {
+    val listState = rememberLazyListState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 4.dp).scrollIndicators(listState)) {
         item(key = MY_SELECTION) {
             ChoiceRow(
                 "My selection",
@@ -779,7 +781,7 @@ private fun rowColors() = ClickableSurfaceDefaults.colors(
 
 /** A row to choose, with a line saying more under its title, and a check mark when [checked] */
 @Composable
-private fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier: Modifier, onClick: () -> Unit) {
+internal fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier: Modifier, switch: Boolean = false, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
@@ -802,7 +804,11 @@ private fun ChoiceRow(title: String, detail: String, checked: Boolean, modifier:
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(if (checked) "✓" else "", style = MaterialTheme.typography.bodyMedium)
+            if (switch) {
+                SwitchMark(checked, LocalContentColor.current)
+            } else {
+                Text(if (checked) "✓" else "", style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }
@@ -883,7 +889,7 @@ private fun SensorOrder(
     if (rows.isEmpty()) {
         EmptyState("Nothing chosen yet")
     }
-    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 4.dp)) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 4.dp).scrollIndicators(listState)) {
         items(rows, key = { it.key }) { row ->
             if (!row.focusable) {
                 Text(

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -28,10 +29,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
@@ -57,6 +60,9 @@ private const val TAG = "Screensaver"
 /** How long each camera shows, in seconds: the steps of − and + in the Cameras dialog */
 val SCREENSAVER_SECONDS = listOf(5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300)
 const val SCREENSAVER_SECONDS_DEFAULT = 15
+
+/** How long the TV waits without input before its screensaver, in seconds: the steps of − and + in the Screensaver tab */
+private val SCREENSAVER_DELAYS = listOf(60, 120, 180, 300, 600, 900, 1200, 1800, 3600, 7200)
 
 // A camera with no picture by then is skipped, so one that's down doesn't hold up the others
 private const val NOT_LIVE_SKIP_MS = 20_000L
@@ -93,6 +99,8 @@ class CameraScreensaver : DreamService(), LifecycleOwner, SavedStateRegistryOwne
         val seconds = prefs.screensaverSeconds
         val minimizeStreams = prefs.minimizeVideoStreams
         val showProgress = prefs.screensaverShowProgress
+        // The launcher may not have run in this process yet
+        DebugOverlay.shown = prefs.showDebugInfo
         AppLog.i(TAG, "Showing ${cameras.size} cameras, $seconds s each")
         setContentView(
             ComposeView(this).apply {
@@ -180,6 +188,8 @@ private class ScreensaverStatus(
     val readable: Boolean,
     // How long without input before it starts
     val startsAfterMs: Int?,
+    // Whether the app may change that: the TV's "Modify system settings" permission
+    val canChangeDelay: Boolean,
 )
 
 // Hidden settings: their names aren't in the SDK, but apps may read them
@@ -201,7 +211,7 @@ private fun Context.readScreensaverStatus(): ScreensaverStatus {
         Triple(null, null, false)
     }
     val startsAfter = runCatching { Settings.System.getInt(resolver, Settings.System.SCREEN_OFF_TIMEOUT) }.getOrNull()
-    return ScreensaverStatus(enabled, chosen, readable, startsAfter)
+    return ScreensaverStatus(enabled, chosen, readable, startsAfter, Settings.System.canWrite(this))
 }
 
 /** Follows changes to the settings, e.g. made in Android's screensaver settings while the dialog stays open */
@@ -223,6 +233,11 @@ private fun rememberScreensaverStatus(): ScreensaverStatus {
         settings.forEach { context.contentResolver.registerContentObserver(it, false, observer) }
         status = context.readScreensaverStatus()
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+    // The permission isn't a setting, so nothing calls back: read it again on coming back from the TV's settings
+    LifecycleResumeEffect(context) {
+        status = context.readScreensaverStatus()
+        onPauseOrDispose { }
     }
     return status
 }
@@ -255,6 +270,21 @@ fun Context.screensaverScreen(): Intent? {
     ).firstOrNull(::opens)
 }
 
+/** The TV's screen that lets HomeBoard change its settings ("Modify system settings"), or null if it has none */
+private fun Context.writeSettingsScreen(): Intent? =
+    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")).takeIf(::opens)
+
+/** Sets how long the TV waits without input before its screensaver. The TV's settings then show it too. */
+private fun Context.setScreensaverDelay(seconds: Int) {
+    try {
+        Settings.System.putInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, seconds * 1_000)
+        AppLog.i(TAG, "Screensaver starts after $seconds s without input")
+    } catch (e: Exception) {
+        // e.g. the permission was taken back meanwhile
+        AppLog.w(TAG, "Couldn't change when the screensaver starts", e)
+    }
+}
+
 /** The screensaver screen if the TV has one to open, otherwise the main screen of its Settings */
 fun Context.openScreensaverSettings() {
     val screen = screensaverScreen() ?: return openSystemSettings()
@@ -268,7 +298,8 @@ fun Context.openScreensaverSettings() {
 
 /**
  * The Cameras dialog's Screensaver tab: how long each camera shows, then whether HomeBoard is the
- * TV's screensaver. Choosing it is up to Android's settings, opened from the dialog's top row.
+ * TV's screensaver. Choosing it is up to Android's settings, opened from the dialog's top row. Last,
+ * how long the TV waits without input before it starts, which HomeBoard can change once the TV allows it.
  */
 /**
  * The screensaver's own dialog: it is the launcher's, not a camera's, so its row lives in the Launcher
@@ -366,6 +397,9 @@ fun ScreensaverStatusDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.padding(top = 10.dp),
                 )
             }
+            status.startsAfterMs?.let { startsAfter ->
+                ScreensaverDelay(startsAfter, status.canChangeDelay)
+            }
         }
     }
 }
@@ -379,6 +413,83 @@ private fun Context.screensaverName(component: ComponentName): String? = try {
 
 internal fun formatSeconds(seconds: Int) = when {
     seconds < 60 -> "$seconds s"
+    seconds % 3600 == 0 -> "${seconds / 3600} h"
     seconds % 60 == 0 -> "${seconds / 60} min"
     else -> "${seconds / 60} min ${seconds % 60} s"
+}
+
+/**
+ * How long the TV waits without input before its screensaver (`screen_off_timeout`), the TV's own
+ * setting, which its screensaver settings also call "When to start". Changing it needs the TV's
+ * "Modify system settings" permission, which only the user can give: Allow opens that screen.
+ */
+@Composable
+private fun ScreensaverDelay(startsAfterMs: Int, canChange: Boolean) {
+    val context = LocalContext.current
+    val allowScreen = remember { context.writeSettingsScreen() }
+    // Android TV's "Never"
+    val never = startsAfterMs <= 0 || startsAfterMs == Int.MAX_VALUE
+    val seconds = startsAfterMs / 1_000
+    // Once allowed, the selection goes from Allow, which leaves, to −
+    val shorter = remember { FocusRequester() }
+    var allowPressed by remember { mutableStateOf(false) }
+    LaunchedEffect(canChange) {
+        if (!canChange || !allowPressed) return@LaunchedEffect
+        allowPressed = false
+        withFrameNanos { }
+        runCatching { shorter.requestFocus() }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 12.dp, end = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Starts after", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Without input. The TV's own setting, whichever screensaver it shows.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val value = if (never) "Never" else formatSeconds(seconds)
+        if (canChange) {
+            OutlinedButton(
+                onClick = { (if (never) SCREENSAVER_DELAYS.last() else SCREENSAVER_DELAYS.lastOrNull { it < seconds })?.let(context::setScreensaverDelay) },
+                modifier = Modifier.focusRequester(shorter),
+            ) { Text("−") }
+            Text(value, style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(
+                onClick = { SCREENSAVER_DELAYS.firstOrNull { !never && it > seconds }?.let(context::setScreensaverDelay) },
+            ) { Text("+") }
+        } else {
+            Text(value, style = MaterialTheme.typography.titleMedium)
+            if (allowScreen != null) {
+                OutlinedButton(
+                    onClick = {
+                        allowPressed = true
+                        try {
+                            context.startActivity(Intent(allowScreen).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        } catch (e: Exception) {
+                            AppLog.w(TAG, "Couldn't open the screen that allows changing system settings", e)
+                        }
+                    },
+                ) { Text("Allow") }
+            }
+        }
+    }
+    if (!canChange) {
+        Text(
+            if (allowScreen != null) {
+                "To change it here, HomeBoard needs the TV's permission to modify system settings: Allow opens it, where you turn it on for HomeBoard."
+            } else {
+                "To change it here, HomeBoard needs the TV's permission to modify system settings, which a computer can give over ADB:\n" +
+                    "adb shell appops set ${context.packageName} WRITE_SETTINGS allow"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, end = 12.dp),
+        )
+    }
 }

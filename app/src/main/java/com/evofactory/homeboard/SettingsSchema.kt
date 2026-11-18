@@ -63,6 +63,9 @@ sealed interface SettingAction {
     /** The one dialog: address and login, opened on the connection step */
     data object OpenHaLogin : SettingAction
 
+    /** Where Android allows it: hand Home to this launcher with no helper */
+    data object OpenDefaultHome : SettingAction
+
     /** The home helper's explanation and its two buttons */
     data object OpenHomeHelper : SettingAction
 
@@ -219,6 +222,15 @@ val AllSettings: List<SettingDef> = listOf(
         SettingAction.OpenBackgroundColour,
         showIf = { it.backgroundKind == BACKGROUND_COLOUR },
     ),
+    toggle(
+        "background_black",
+        SettingSection.Launcher,
+        "Background",
+        "Pure black",
+        "Instead of the launcher's dark grey: what OLED screens and burn-in protection want",
+        LauncherPrefs::blackBackground,
+        showIf = { it.backgroundKind == BACKGROUND_NONE },
+    ),
     action(
         "background_image",
         SettingSection.Launcher,
@@ -262,6 +274,14 @@ val AllSettings: List<SettingDef> = listOf(
         "Pressing Home opens this launcher instead of the TV's own home screen",
         LauncherPrefs::catchHomeKey,
         requiresConsent = true,
+    ),
+    action(
+        "default_home",
+        SettingSection.Launcher,
+        "Home button",
+        "Default home app",
+        "Where Android allows it, the TV hands Home to this launcher with no helper; where it can't, it says why",
+        SettingAction.OpenDefaultHome,
     ),
     action(
         "home_helper",
@@ -832,6 +852,14 @@ val AllSettings: List<SettingDef> = listOf(
         "Free memory",
         "Show the memory left on the TV beside the clock",
         LauncherPrefs::showFreeMemory,
+    ),
+    toggle(
+        "debug_info",
+        SettingSection.Advanced,
+        "Debug",
+        "Debug info",
+        "Labels each camera's video pipeline or GPU beside its picture, and is what shows the free memory in the top bar",
+        LauncherPrefs::showDebugInfo,
     ),
     action(
         "notifications_access",

@@ -8,6 +8,7 @@ class HomeBoardApp : Application() {
         super.onCreate()
         instance = this
         AppLog.start(this)
+        ScreenState.watch(this)
     }
 
     companion object {

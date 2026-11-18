@@ -2092,3 +2092,76 @@ object and the export format are untouched, so an export file still reads and no
 
 Home → Burn-in protection on the TV, all five rows with their new titles and reasons legible, toggles
 and the stepper where they were. The rename table above carries the before/after.
+
+## Merged upstream v1.3.0, build 26 (2026-11-18)
+
+Upstream went from build 17 (the fork point) to v1.3.0 with 10 commits; the fork had 48. Merged as one
+merge commit — no rebase, because `fork/m1` is pushed and is origin's default. 12 files conflicted (34
+hunks); every resolution keeps the fork's behaviour and takes upstream's fix or feature where they
+don't compete.
+
+### Upstream in this merge
+
+| Build | What landed |
+|---|---|
+| 18 | `DefaultHome.kt` (267 lines): ask Android for the home role, else explain why it can't |
+| 19 | Screen off timeout: "Starts after" with −/+, or the WRITE_SETTINGS permission that allows it |
+| 20 | Peer transfer by typed address + TCP listener (`PeerTransfer.kt` +418), `closeDirect()` on dismiss |
+| 21 | `LagWatch.kt`: "Lag: x s" over a camera behind live |
+| 22 | `Frigate`: accept system-trusted certificates, pin changes in `FrigateCertificateDialog` |
+| 23 | Export/import checklists say which Home Assistant and Frigate account they carry |
+| 24 | Clips tab (Alerts/Detections/Saved, `SubTabRow`, `ScrollIndicators`), padded clips, player errors, camera GPU/hardware pipeline + `DebugOverlay`, `ScreenState` hold, background Gray/Black, pre-setup outline |
+| 25 | Frigate `pre_capture`/`post_capture` re-read each launcher show (`FrigateCapture`) |
+| 26 | Version 1.3.0, build 26 |
+
+### Where upstream's features live in the fork now
+
+The fork's settings page replaced upstream's launcher dialog, so three dialog-era features were
+re-homed as schema rows rather than lost:
+
+- **Default home app** — `SettingAction.OpenDefaultHome` → `DefaultHomeOptionDialog` (wraps upstream's
+  `DefaultHomeOption` in a `TopDialog`), Launcher › Home button.
+- **Pure black background** — toggle on `LauncherPrefs::blackBackground`, shown when the fork's
+  background kind is None; the black `Surface` colours under the fork's `LauncherBackgroundLayer`.
+- **Debug info** — toggle on `LauncherPrefs::showDebugInfo`, Advanced › Debug; `DebugOverlay.shown` is
+  synced in `onSettingsChanged` next to `blackBackground`, so the camera labels appear without a restart.
+- **Screensaver "Starts after"** — upstream's `ScreensaverDelay` composable added inside the fork's
+  `ScreensaverStatusDialog` (fork imports trimmed of the duplicated `FocusRequester`); the page's
+  `screensaver_status` row was already the door.
+
+### Conflicted files and how each was resolved
+
+| File | Resolution |
+|---|---|
+| `LauncherPrefs.kt` | Fork's property block kept whole (incl. its own `showFreeMemory` setter); upstream's new keys (`showDebugInfo`, `homeOverrideAccepted`, `replaceHomeAutoOff`, `blackBackground`) arrived in clean regions |
+| `SettingsButton.kt` | Fork's single cog: `onOpenSettings` only; the old context menu stays gone, debug info moved to the schema |
+| `ExportImport.kt` | Upstream's "Account: none"/"Account: admin" subtitle + fork's Settings section (one line per set) side by side |
+| `Frigate.kt` | Upstream's `FrigateCapture` data class; fork's `normalizeUrl` one-liner stays |
+| `PeerTransfer.kt` | Fork's anti-MITM code wording; upstream's `closeDirect()` added to the fork's dismiss callback, fork's login-tick hint kept |
+| `CameraView.kt` | Fork's HA-source guard (no RTSP source for HA cameras) + upstream's TextureView/SurfaceView choice; log line carries fork's redaction, audio state and upstream's pipeline name |
+| `Cameras.kt` | `CameraGrid` takes `soundEnabled`, `ha`, `maxHardware`; the HA still branch kept, the streaming branch gained upstream's `key(hardware)` + `gpu`; `CameraAdvancedSettings` keeps the fork's SwitchRow (with upstream's `minimizeModifier`); the screensaver tab stays deleted from the cameras dialog |
+| `HomeAssistantTab.kt` | Fork's scrolling `LazyRow` views row (upstream's `SubTabRow` is a plain Row and can't follow the remote); `ViewRowLift`/`ViewRowHeight` restored from base since upstream deleted them |
+| `HomeAssistantDialog.kt` | Fork's hints and `HaDialogTab`; `ChoiceRow` takes upstream's `internal` + `switch` signature and regains the base switch branch, so Frigate's Clips toggles render as switches |
+| `Screensaver.kt` | Fork's status dialog only; upstream's 184-line dialog body dropped (settings are page rows), `withFrameNanos` import kept for the delay row |
+| `LauncherSettingsDialog.kt` | Fork's `HomeHelperWarning` and `HomeOverrideConsentDialog`; the old dialog is not resurrected |
+| `MainActivity.kt` | Fork's state block + upstream's `dismissedCertificate`; black `Surface` + fork background layer + fork phone-app filter; upstream's pre-setup outline placed inside the fork's `panelSlot` (third branch), fork's camera-shape math; fork's badge wiring and free-memory state (`showFreeMemory` restored); single-cog `SettingsButton`; `shownTabs` also folds upstream's "all Clips lists off"; cert dialog and notification-grant dialog both hosted |
+
+### Deliberate designs kept
+
+- The settings page (schema-driven) is the only settings surface; the cog has one callback.
+- Apps-first Home row, watch-next setting, infinite scroll, calendar card, HA still cameras: untouched.
+- The export format is still v3; the merge did not touch `SettingsFile`'s fields, only the checklist's
+  section list.
+- `SubTabRow` stays for the Clips tab; the Assistant tab keeps its scrolling row.
+
+### Verified
+
+- `./gradlew test assembleDebug`: BUILD SUCCESSFUL; 41 unit tests in 5 classes, 0 failures
+  (including upstream's new `CertificateNamesTest`).
+- On the Shield (build 26 installed over 17, no downgrade): Home tab (camera + calendar + apps row,
+  no events/watch-next row), Clips tab with Alerts/Detections/Saved and live clips, clip playback,
+  settings page categories, Default home app dialog ("HomeBoard is the default home app"), Debug info
+  toggle, screensaver "Starts after 15 min" row with the ADB fallback, Frigate dialog (trusted
+  certificate SHA-256, Frigate 0.18.2, Clips switches), export checklist ("Account: admin" + Settings
+  58, App tiles 25), export file written (version 3, 9415 bytes), import of that file parsed and
+  applied. No FATAL/AndroidRuntime errors in logcat across the session.

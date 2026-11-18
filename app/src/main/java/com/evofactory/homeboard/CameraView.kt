@@ -13,6 +13,8 @@ import android.os.SystemClock
 import android.view.Gravity
 import android.view.PixelCopy
 import android.view.SurfaceView
+import android.view.TextureView
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -172,7 +174,7 @@ val CameraShape = RoundedCornerShape(8.dp)
 const val STRETCHED_ASPECT = 16f / 9f
 
 // Error line of the status: readable on the dark chip, clearly not the normal text
-val ErrorColor = Color(0xFFFFB4AB)
+val ErrorColor = Color(0xFFFF5449)
 
 private enum class Phase {
     /** Streaming attempt in progress, waiting for the first picture */
@@ -210,6 +212,9 @@ private class ConnectionStatus(val cameraHost: String) {
     /** Before connecting: other players are still releasing their decoders */
     var waitingForDecoders by mutableStateOf(false)
 
+    /** Seconds behind live while that's abnormal (see [LagMeter]), else null */
+    var lag by mutableStateOf<Float?>(null)
+
     val live get() = phase == Phase.Live
 
     /** Something went wrong, rather than only still connecting */
@@ -217,6 +222,7 @@ private class ConnectionStatus(val cameraHost: String) {
 
     fun reset(phase: Phase) {
         this.phase = phase
+        lag = null
         lostAt = null
         retries = 0
         cameraAnswered = null
@@ -259,6 +265,9 @@ fun NotLiveMark(modifier: Modifier = Modifier, size: Dp = 24.dp) {
  * 4:3 substream of a 16:9 camera.
  *
  * [showProgress] off leaves out the status while it's only connecting: it shows once something fails.
+ *
+ * [gpu] draws the picture with the GPU in the app's window (a TextureView) instead of the TV's
+ * hardware video pipeline (a SurfaceView), which shows only a few videos at once on some TVs.
  */
 @Composable
 fun CameraView(
@@ -286,6 +295,7 @@ fun CameraView(
     // Off when the picture fills the screen
     rounded: Boolean = true,
     stretch: Boolean = false,
+    gpu: Boolean = false,
 ) {
     val context = LocalContext.current
     val status = remember(url) { ConnectionStatus(Uri.parse(url).host.orEmpty()) }
@@ -293,10 +303,10 @@ fun CameraView(
     val snapshots = remember(url) { SnapshotStore(context.filesDir, url) }
 
     // A SurfaceView: decoded frames go straight to the TV's hardware video layer, the cheapest and
-    // fastest path (a TextureView would copy each frame through the GPU)
+    // fastest path. A TextureView copies each frame through the GPU, into the app's window.
     val frame = remember { AspectRatioFrameLayout(context).apply { resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } }
-    val video = remember {
-        SurfaceView(context).also {
+    val video: View = remember {
+        (if (gpu) TextureView(context) else SurfaceView(context)).also {
             // Centred: the frame itself is laid out over the whole space, only the picture takes the stream's shape
             frame.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
             // The picture's layer only follows the view when the window draws again, and Compose may lay the view
@@ -318,8 +328,12 @@ fun CameraView(
     // Heard in full screen only
     val audible = withAudio && fullScreen
     val current = remember { mutableStateOf<CameraConnection?>(null) }
+    // Not while the TV goes to sleep: the launcher shows again for a moment when the screensaver ends for standby
+    val screenOn = ScreenState.interactive
     if (mayConnect) {
-        LifecycleStartEffect(url, useTcp, useAudio, withAudio, minimizeStreams) {
+        if (screenOn) LifecycleStartEffect(url, useTcp, useAudio, withAudio, minimizeStreams) {
+            // Asked again just before this (MainActivity.onStart): the TV may have started going to sleep since
+            if (!ScreenState.interactive) return@LifecycleStartEffect onStopOrDispose { }
             val snapshotInterval = if (compact) COMPACT_SNAPSHOT_INTERVAL_MS else SNAPSHOT_INTERVAL_MS
             val connection = CameraConnection(
                 context, url, useTcp, useAudio, withAudio, audible, stretch, video, frame, status, snapshots, snapshotInterval, minimizeStreams,
@@ -388,6 +402,10 @@ fun CameraView(
                 NotLiveMark(Modifier.align(Alignment.BottomEnd).padding(16.dp), size = 36.dp)
             }
         }
+        if (DebugOverlay.shown) PipelineLabel(gpu, Modifier.align(Alignment.TopStart).padding(8.dp))
+        status.lag?.takeIf { status.live }?.let { lag ->
+            LagLabel(lag, compact, Modifier.align(Alignment.TopEnd).padding(if (compact) 6.dp else 12.dp))
+        }
         // The hardware video layer ignores clipping: its corners are painted over in the background colour
         if (rounded) {
             Canvas(Modifier.matchParentSize()) {
@@ -406,6 +424,27 @@ fun CameraView(
     } else {
         Picture(modifier, rounded = rounded)
     }
+}
+
+/** Debug info shown over every video, from the cog menu; set from the settings by whoever shows videos */
+object DebugOverlay {
+    var shown by mutableStateOf(false)
+}
+
+private val HardwareLabelColor = Color(0xFF7BD88F)
+private val GpuLabelColor = Color(0xFFFFB74D)
+
+/** HW: the TV's hardware video pipeline. GPU: drawn by the GPU in the app's window. */
+@Composable
+fun PipelineLabel(gpu: Boolean, modifier: Modifier = Modifier) {
+    Text(
+        if (gpu) "GPU" else "HW",
+        style = MaterialTheme.typography.labelMedium,
+        color = if (gpu) GpuLabelColor else HardwareLabelColor,
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 /**
@@ -481,7 +520,8 @@ private class CameraConnection(
     private val withAudio: Boolean,
     audible: Boolean,
     stretch: Boolean,
-    private val video: SurfaceView,
+    // A SurfaceView (the TV's video pipeline) or a TextureView (the GPU)
+    private val video: View,
     private val frame: AspectRatioFrameLayout,
     private val status: ConnectionStatus,
     private val snapshots: SnapshotStore,
@@ -561,7 +601,10 @@ private class CameraConnection(
                         .createMediaSource(MediaItem.fromUri(url)),
                 )
             }
-            setVideoSurfaceView(video)
+            when (video) {
+                is TextureView -> setVideoTextureView(video)
+                is SurfaceView -> setVideoSurfaceView(video)
+            }
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() = onLive()
 
@@ -623,6 +666,9 @@ private class CameraConnection(
     }
 
     private val logId = Integer.toHexString(url.hashCode()).takeLast(4)
+    private val lagMeter = LagMeter()
+    private var lagChecksOver = 0
+    private var lagWorst = 0f
     private var quietRetries = 0
     private var released = false
     private var playerWatch = PlayerWatch(player, "Player $logId")
@@ -644,7 +690,8 @@ private class CameraConnection(
         openPlayers += 1
         // Host and path only: a camera's address can carry a login
         val shown = if (haEntity != null) haEntity else url.substringAfter("://").substringAfter('@')
-        AppLog.i(TAG, "Player $logId started over ${if (haEntity != null) "HLS" else if (useTcp) "TCP" else "UDP"}, audio: ${if (useAudio) "on" else "off"}, $shown, open: $openPlayers")
+        val pipeline = if (video is TextureView) "GPU" else "hardware pipeline"
+        AppLog.i(TAG, "Player $logId started over ${if (haEntity != null) "HLS" else if (useTcp) "TCP" else "UDP"} on the $pipeline, audio: ${if (useAudio) "on" else "off"}, $shown, open: $openPlayers")
         status.reset(Phase.Connecting)
         // Known before the stream's own shape is
         if (stretch) applyAspect()
@@ -759,6 +806,9 @@ private class CameraConnection(
             AppLog.i(TAG, "Player $logId picture on a new surface")
         } else {
             AppLog.i(TAG, "Player $logId live after ${SystemClock.elapsedRealtime() - attemptStartedAt} ms")
+            // A new player starts live
+            lagMeter.reset()
+            lagChecksOver = 0
         }
         quietRetries = 0
         status.reset(Phase.Live)
@@ -802,6 +852,7 @@ private class CameraConnection(
      */
     private fun lose(reason: String, unreachable: Boolean, stalledFor: Long = 0, retryDelay: Long? = null) {
         if (status.phase != Phase.Live && status.phase != Phase.Connecting) return
+        status.lag = null
         val now = SystemClock.elapsedRealtime()
         // It reached the camera and still lost the picture. Otherwise, the next try can use it again
         if (status.live || status.cameraAnswered != null) needsNewPlayer = true
@@ -861,6 +912,29 @@ private class CameraConnection(
         nextSnapshotAt = if (settled) now + snapshotInterval else liveAt + SETTLED_SNAPSHOT_DELAY_MS
     }
 
+    /** Every check while live: shows the lag once it's held above [LagMeter.SHOW_S], and logs it */
+    private fun checkLag(now: Long) {
+        val lag = lagMeter.add(player.currentPosition, now)
+        val shown = status.lag
+        when {
+            shown != null && lag < LagMeter.HIDE_S -> {
+                AppLog.i(TAG, "Player $logId caught up, after being up to ${String.format(java.util.Locale.ROOT, "%.1f", lagWorst)} s behind live")
+                status.lag = null
+                lagChecksOver = 0
+            }
+            shown != null -> {
+                if (kotlin.math.abs(lag - shown) >= 0.1f) status.lag = lag
+                lagWorst = kotlin.math.max(lagWorst, lag)
+            }
+            lag >= LagMeter.SHOW_S -> if (++lagChecksOver >= 2) {
+                status.lag = lag
+                lagWorst = lag
+                AppLog.w(TAG, "Player $logId is ${String.format(java.util.Locale.ROOT, "%.1f", lag)} s behind live")
+            }
+            else -> lagChecksOver = 0
+        }
+    }
+
     private fun check() {
         // Keep close to live: speed up while too much is buffered
         val behind = player.bufferedPosition - player.currentPosition
@@ -874,6 +948,7 @@ private class CameraConnection(
             Phase.Live -> {
                 // Watchdog: a camera that stops sending raises no error, the last frame just stays on screen
                 checkBlackPicture(now)
+                checkLag(now)
                 val frames = renderedFrames()
                 if (frames != lastFrames) {
                     lastFrames = frames
@@ -1066,15 +1141,20 @@ private class SnapshotStore(private val dir: File, private val url: String) {
 
     suspend fun load() = loadSnapshot(dir, url)
 
-    /** Copies the frame on screen from the video layer, while it's visible; with [save], also to disk */
+    /**
+     * Copies the frame on screen from the video layer, while it's visible; with [save], also to disk.
+     * On the main thread.
+     */
     fun capture(
-        video: SurfaceView,
+        video: View,
         handler: Handler,
         takenAt: Long = System.currentTimeMillis(),
         save: Boolean = true,
         onCopied: (black: Boolean) -> Unit = {},
     ) {
-        if (!video.holder.surface.isValid || video.width == 0) return
+        if (video.width == 0) return
+        if (video is SurfaceView && !video.holder.surface.isValid) return
+        if (video is TextureView && !video.isAvailable) return
         val bitmap = Bitmap.createBitmap(SNAPSHOT_WIDTH, SNAPSHOT_WIDTH * video.height / video.width, Bitmap.Config.ARGB_8888)
         val onResult = PixelCopy.OnPixelCopyFinishedListener { result ->
             // A copy can come back black, e.g. while something covers the video; the previous picture is kept
@@ -1095,9 +1175,16 @@ private class SnapshotStore(private val dir: File, private val url: String) {
                 }
             }
         }
+        // Already a GPU picture: copied on the main thread, as TextureView requires
+        if (video is TextureView) {
+            video.getBitmap(bitmap)
+            onResult.onPixelCopyFinished(PixelCopy.SUCCESS)
+            return
+        }
+        val surfaceView = video as SurfaceView
         pictureCopying.execute {
             try {
-                PixelCopy.request(video, bitmap, onResult, handler)
+                PixelCopy.request(surfaceView, bitmap, onResult, handler)
             } catch (e: IllegalArgumentException) {
                 // The surface went away just before the copy
                 handler.post { onResult.onPixelCopyFinished(PixelCopy.ERROR_SOURCE_NO_DATA) }

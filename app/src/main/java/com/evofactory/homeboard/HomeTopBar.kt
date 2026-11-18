@@ -51,8 +51,8 @@ enum class HomeTab(val label: String, val color: Color) {
     /** All the cameras' last pictures */
     Cameras("Cameras", Color(0xFF5FB36A)),
 
-    /** The latest Frigate alerts */
-    Alerts("Alerts", Color(0xFFD9B84A)),
+    /** Frigate's latest alerts, detections and saved clips */
+    Alerts("Clips", Color(0xFFD9B84A)),
 
     /** Every chosen Home Assistant sensor and action, in a card per room */
     Assistant("Assistant", Color(0xFF5A8FD9)),
@@ -78,7 +78,8 @@ fun HomeTopBar(
     newEventsCalm: Boolean = false,
     // A dot on the Alerts tab while there are alerts nobody has looked at
     alertsDot: Boolean = false,
-    // The tabs to show: Alerts can be hidden, and has no meaning without a Frigate server
+    // The tabs to show: Alerts can be hidden, has no meaning without a Frigate server, and goes when
+    // the Frigate dialog has turned all its lists off
     tabs: List<HomeTab> = HomeTab.entries,
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
