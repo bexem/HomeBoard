@@ -4,7 +4,7 @@ This is the launcher on the Shield in my living room. It started as [fplanque/Ho
 
 I'm not going to pretend otherwise: I built this with AI. The ideas, the screens, what's wrong with them and what to try next are mine; the Kotlin is an agent's, run against my own TV, and I'm the one sitting there with the remote saying what's broken. Upstream is a real, complete app and it's good, so if the above bothers you, go use it.
 
-`main` is upstream, untouched, at `9cce11b` (1.2.0). My work is on `fork/*`: 40 commits, roughly one per thing that got built. [FORK.md](FORK.md) is the log, and it's long on purpose: what changed, what I saw on the TV, what broke, what I did about it, and what I'm still not sure about.
+`main` is upstream, untouched, at `7521268` (1.3.0, build 26): it tracks `upstream/main`, nothing else. My work is on `fork/m1`, 48 commits of it, roughly one per thing that got built, merged with upstream's 1.3.0 in one commit so the history stays readable. [FORK.md](FORK.md) is the log, and it's long on purpose: what changed, what I saw on the TV, what broke, what I did about it, and what I'm still not sure about.
 
 There's no APK here, no releases, nothing to download. Build one yourself, [Build from source](#build-from-source). It keeps upstream's `applicationId` and `versionCode` on purpose, so Android sees it as the same app: it can't sit next to an upstream release, and putting one over the other fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the keys differ. Uninstall first, or don't install it.
 
@@ -35,6 +35,7 @@ There's no APK here, no releases, nothing to download. Build one yourself, [Buil
 - **Cameras tab:** the alert strip has its own switch and gives the grid that room, and a grid that fits uses the screen's width instead of leaving a margin.
 - **Screensaver:** its settings are rows on the page. It was a popup for no good reason.
 - **Gone:** upstream's `CH` mark over the Home camera. The behaviour behind it is now the "Channel keys switch cameras" setting, which is where a setting belongs.
+- **Upstream 1.3.0 is all here:** the Clips tab, asking Android to be the default home app, peer transfer by typed address, the lag watch, the certificate pinning, the new camera pipeline. Three of its switches used to live in its launcher dialog, so they are rows on the page now instead: default home app under Launcher, pure black background under Background, debug info under Advanced. The screensaver's start delay sits inside its status screen, because that is the thing the delay belongs to.
 
 ## What I fixed
 
