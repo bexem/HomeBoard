@@ -2165,3 +2165,23 @@ re-homed as schema rows rather than lost:
   certificate SHA-256, Frigate 0.18.2, Clips switches), export checklist ("Account: admin" + Settings
   58, App tiles 25), export file written (version 3, 9415 bytes), import of that file parsed and
   applied. No FATAL/AndroidRuntime errors in logcat across the session.
+
+## Published (2026-11-18)
+
+`bexem/HomeBoard` is public and is a fork of `fplanque/HomeBoard`: GitHub will not keep a fork's own
+visibility, so the private mirror could not be flipped, it had to be replaced. `fork/m1` is the
+default branch; `main` is upstream's, unchanged.
+
+Two things happened on the way out, both worth knowing before the next push rewrites anything:
+
+- **The history was rewritten once.** The tree had been scrubbed of the household's addresses on
+  2026-11-14, but 49 older commits still carried them inside this ledger, and one paragraph named the
+  subnet. `git filter-repo --replace-text` replaced all three with `<ha-host>`, `<camera-host>` and
+  "the private subnet" across every commit. Upstream's commits kept their hashes; the fork's were
+  rewritten, so `fork/m1` before and after the rewrite are different history that says the same thing.
+  Verified by cloning the published repo and grepping every commit: no address, no token, no home path.
+- **The pre-scrub history survives in `bexem/HomeBoard-mirror`**, private, untouched, as the archive.
+  It is not a remote of this checkout any more; `origin` is the public fork.
+
+No secret was ever in the tree: `local.properties` and `AGENTS.md` are gitignored, the keystore lives
+in `~/.homeboard` with its password in the Keychain, and no commit has ever held a token.
